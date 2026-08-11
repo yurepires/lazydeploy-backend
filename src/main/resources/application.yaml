@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: lazy-deploy
+
+bf4:
+  base-url: https://api.bflist.io/v2/bf4
+
+  server:
+    guid: 494eef2a-0155-4df3-91b0-58f565cc5f53
+
+  monitoring:
+    interval: 30s
+
+  api:
+    page-size: 100

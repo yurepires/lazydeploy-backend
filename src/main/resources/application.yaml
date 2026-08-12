@@ -5,11 +5,90 @@ spring:
 bf4:
   base-url: https://api.bflist.io/v2/bf4
 
-  server:
-    guid: 494eef2a-0155-4df3-91b0-58f565cc5f53
-
   monitoring:
     interval: 30s
 
   api:
     page-size: 100
+
+  monitored-servers:
+    - guid: 494eef2a-0155-4df3-91b0-58f565cc5f53
+      ip: 131.196.199.123
+      port: 25226
+      name: "! -LOST- CONQUEST CLASSICS | ALL MAPS | 60Hz !"
+      enabled: true
+      min-players: 60
+      favorite-maps:
+        - MP_Prison
+        - XP0_Metro
+        - XP3_MarketPl
+        - XP1_003
+        - XP2_004
+        - MP_Abandoned
+        - MP_Tremors
+        - MP_Flooded
+
+    - guid: 9138463d-f3af-47b0-a42e-4d33da4ec9f1
+      enabled: true
+      min-players: 50
+      favorite-maps:
+        - MP_Prison
+        - XP0_Metro
+        - XP3_MarketPl
+        - XP1_003
+        - XP2_004
+        - MP_Abandoned
+        - MP_Tremors
+        - MP_Flooded
+
+    - guid: 58fb3dfa-6e01-40c0-b4e8-d4bdeb07e646
+      enabled: true
+      min-players: 50
+      favorite-maps:
+        - MP_Prison
+        - XP0_Metro
+        - XP3_MarketPl
+        - XP1_003
+        - XP2_004
+        - MP_Abandoned
+        - MP_Tremors
+        - MP_Flooded
+
+    - guid: 74cd6f06-a696-4157-979c-fb594f00362d
+      enabled: true
+      min-players: 50
+      favorite-maps:
+        - MP_Prison
+        - XP0_Metro
+        - XP3_MarketPl
+        - XP1_003
+        - XP2_004
+        - MP_Abandoned
+        - MP_Tremors
+        - MP_Flooded
+
+    - guid: 98a60c12-be3b-45fa-a8c7-b96fa9efb503
+      enabled: true
+      min-players: 50
+      favorite-maps:
+        - MP_Prison
+        - XP0_Metro
+        - XP3_MarketPl
+        - XP1_003
+        - XP2_004
+        - MP_Abandoned
+        - MP_Tremors
+        - MP_Flooded
+
+    - guid: c4fad2a1-5336-4f1c-9b14-730ff588ff9d
+      enabled: true
+      min-players: 40
+      favorite-maps:
+        - MP_Prison
+        - XP0_Metro
+        - XP3_MarketPl
+        - XP1_003
+        - XP2_004
+        - MP_Abandoned
+        - MP_Tremors
+        - MP_Flooded

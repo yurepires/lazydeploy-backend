@@ -1,7 +1,9 @@
 package com.yurepires.lazydeploy.battlefield;
 
-import com.yurepires.lazydeploy.dto.Bf4ServerPageResponse;
-import com.yurepires.lazydeploy.dto.Bf4ServerResponse;
+import com.yurepires.lazydeploy.battlefield.dto.Bf4ServerPageResponse;
+import com.yurepires.lazydeploy.battlefield.dto.Bf4ServerResponse;
+import com.yurepires.lazydeploy.domain.server.ServerCatalogSnapshot;
+import com.yurepires.lazydeploy.domain.server.ServerSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -22,20 +24,21 @@ public class BfListSnapshotService {
     private static final int MAX_CURSOR_RESTARTS = 1;
 
     private final BfListClient client;
+    private final BfListServerMapper mapper;
 
-    public BfListSnapshotService(BfListClient client) {
+    public BfListSnapshotService(BfListClient client, BfListServerMapper mapper) {
         this.client = client;
+        this.mapper = mapper;
     }
 
-    public Optional<Bf4ServerSnapshot> fetchSnapshot() {
+    public Optional<ServerCatalogSnapshot> fetchSnapshot() {
         int cursorRestarts = 0;
 
         while (true) {
             try {
                 return Optional.of(fetchCurrentSnapshot());
             } catch (WebClientResponseException exception) {
-                if (exception.getStatusCode() == HttpStatus.GONE
-                        && cursorRestarts < MAX_CURSOR_RESTARTS) {
+                if (exception.getStatusCode() == HttpStatus.GONE && cursorRestarts < MAX_CURSOR_RESTARTS) {
                     cursorRestarts++;
                     log.warn("Cursor expirado. Reiniciando o snapshot pela primeira página.");
                     continue;
@@ -53,7 +56,7 @@ public class BfListSnapshotService {
         }
     }
 
-    private Bf4ServerSnapshot fetchCurrentSnapshot() {
+    private ServerCatalogSnapshot fetchCurrentSnapshot() {
         List<Bf4ServerResponse> allServers = new ArrayList<>();
         Bf4ServerPageResponse page = null;
 
@@ -71,7 +74,11 @@ public class BfListSnapshotService {
             allServers.addAll(page.servers());
 
             if (!page.hasMore()) {
-                return Bf4ServerSnapshot.from(allServers, Instant.now());
+                Instant capturedAt = Instant.now();
+                List<ServerSnapshot> normalized = allServers.stream()
+                        .map(server -> mapper.map(server, capturedAt))
+                        .toList();
+                return ServerCatalogSnapshot.from(normalized, capturedAt);
             }
 
             if (page.servers().isEmpty() || page.cursor() == null || page.cursor().isBlank()) {
@@ -83,9 +90,7 @@ public class BfListSnapshotService {
             page = client.getNextServerPage(page.cursor(), after);
         }
 
-        throw new IllegalStateException(
-                "Snapshot excedeu o limite de " + MAX_PAGES_PER_SNAPSHOT + " páginas"
-        );
+        throw new IllegalStateException("Snapshot excedeu o limite de " + MAX_PAGES_PER_SNAPSHOT + " páginas");
     }
 
     private void logHttpError(WebClientResponseException exception) {

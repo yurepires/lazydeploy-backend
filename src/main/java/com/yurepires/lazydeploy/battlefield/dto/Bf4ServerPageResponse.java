@@ -1,4 +1,4 @@
-package com.yurepires.lazydeploy.dto;
+package com.yurepires.lazydeploy.battlefield.dto;
 
 import java.util.List;
 

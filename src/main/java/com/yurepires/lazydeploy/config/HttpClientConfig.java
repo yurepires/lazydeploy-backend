@@ -8,7 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class HttpClientConfig {
 
     @Bean
-    public WebClient bfListWebClient(Bf4Properties properties) {
+    public WebClient bfListWebClient(LazyDeployProperties properties) {
         return WebClient.builder()
                 .baseUrl(properties.baseUrl())
                 .build();

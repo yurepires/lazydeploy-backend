@@ -1,13 +1,12 @@
 package com.yurepires.lazydeploy.notification;
 
-import com.yurepires.lazydeploy.domain.monitoring.ServerState;
 import com.yurepires.lazydeploy.domain.notification.NotificationCandidate;
+import com.yurepires.lazydeploy.domain.monitoring.ServerState;
 import com.yurepires.lazydeploy.domain.notification.NotificationChannel;
 import com.yurepires.lazydeploy.domain.notification.NotificationChannelConfiguration;
 import com.yurepires.lazydeploy.domain.notification.NotificationResult;
 import com.yurepires.lazydeploy.domain.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.domain.server.MonitoredServer;
-import com.yurepires.lazydeploy.domain.server.ServerSnapshot;
 import com.yurepires.lazydeploy.notification.rule.MapInRuleEvaluator;
 import com.yurepires.lazydeploy.notification.rule.NotificationEvaluationService;
 import com.yurepires.lazydeploy.notification.rule.PlayerCountAtLeastRuleEvaluator;
@@ -18,6 +17,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.yurepires.lazydeploy.TestFixtures.monitored;
 import static com.yurepires.lazydeploy.TestFixtures.rule;
@@ -33,10 +33,11 @@ class NotificationOrchestratorTest {
         MonitoredServer server = server(List.of(channel("TEST")));
         Instant now = Instant.now();
 
-        orchestrator.initialize(server, "state-1");
-        orchestrator.process(server, snapshot("guid", "MAP_A", 20), null, "state-1", now);
-        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, "state-1", now.plusSeconds(1));
-        orchestrator.process(server, snapshot("guid", "MAP_A", 55), null, "state-1", now.plusSeconds(2));
+        UUID round = UUID.randomUUID();
+        orchestrator.initialize("guid", round);
+        orchestrator.process(server, snapshot("guid", "MAP_A", 20), null, state(round, now), now);
+        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, state(round, now), now.plusSeconds(1));
+        orchestrator.process(server, snapshot("guid", "MAP_A", 55), null, state(round, now), now.plusSeconds(2));
 
         assertThat(channel.candidates).hasSize(1);
     }
@@ -48,9 +49,11 @@ class NotificationOrchestratorTest {
         MonitoredServer server = server(List.of(channel("TEST")));
         Instant now = Instant.now();
 
-        orchestrator.initialize(server, "state-1");
-        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, "state-1", now);
-        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, "state-2", now.plusSeconds(1));
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        orchestrator.initialize("guid", first);
+        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, state(first, now), now);
+        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, state(second, now.plusSeconds(1)), now.plusSeconds(1));
 
         assertThat(channel.candidates).hasSize(2);
     }
@@ -62,8 +65,9 @@ class NotificationOrchestratorTest {
         NotificationOrchestrator orchestrator = orchestrator(failing, succeeding);
         MonitoredServer server = server(List.of(channel("FAIL"), channel("SUCCESS")));
 
-        orchestrator.initialize(server, "state");
-        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, "state", Instant.now());
+        UUID round = UUID.randomUUID();
+        orchestrator.initialize("guid", round);
+        orchestrator.process(server, snapshot("guid", "MAP_A", 50), null, state(round, Instant.now()), Instant.now());
 
         assertThat(failing.candidates).hasSize(1);
         assertThat(succeeding.candidates).hasSize(1);
@@ -83,12 +87,13 @@ class NotificationOrchestratorTest {
                 base.notificationChannels()
         );
 
-        orchestrator.initialize(withoutDisplayName, "state");
+        UUID round = UUID.randomUUID();
+        orchestrator.initialize("guid", round);
         orchestrator.process(
                 withoutDisplayName,
                 snapshot("guid", "MAP_A", 50),
                 null,
-                "state",
+                state(round, Instant.now()),
                 Instant.now()
         );
 
@@ -119,6 +124,10 @@ class NotificationOrchestratorTest {
 
     private NotificationChannelConfiguration channel(String type) {
         return new NotificationChannelConfiguration(type, true, Map.of());
+    }
+
+    private ServerState state(UUID round, Instant observedAt) {
+        return new ServerState("guid", round, "MAP_A", 300, observedAt, observedAt);
     }
 
     private static final class CapturingChannel implements NotificationChannel {

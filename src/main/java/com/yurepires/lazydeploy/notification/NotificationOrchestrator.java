@@ -22,6 +22,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -40,20 +42,23 @@ public class NotificationOrchestrator {
         this.deliveryPolicy = deliveryPolicy;
     }
 
-    public void initialize(MonitoredServer server, String stateIdentity) {
-        notificationStates.put(server.id(), NotificationState.pending(server.id(), stateIdentity));
+    public void initialize(String serverGuid, UUID roundInstanceId) {
+        notificationStates.put(serverGuid, NotificationState.pending(serverGuid, roundInstanceId));
     }
 
     public void process(
             MonitoredServer configuration,
             ServerSnapshot currentSnapshot,
             ServerState previousState,
-            String stateIdentity,
+            ServerState currentState,
             Instant evaluatedAt
     ) {
+        String serverGuid = currentSnapshot.serverGuid();
         NotificationState notificationState = notificationStates.compute(
-                configuration.id(),
-                (serverId, existing) -> existing == null || !existing.stateIdentity().equals(stateIdentity) ? NotificationState.pending(serverId, stateIdentity) : existing
+                serverGuid,
+                (guid, existing) -> existing == null || !existing.roundInstanceId().equals(currentState.roundInstanceId())
+                        ? NotificationState.pending(guid, currentState.roundInstanceId())
+                        : existing
         );
 
         EvaluationContext context = new EvaluationContext(
@@ -73,15 +78,15 @@ public class NotificationOrchestrator {
         NotificationCandidate candidate = new NotificationCandidate(
                 configuration.id(),
                 currentSnapshot,
-                stateIdentity,
+                notificationState.deduplicationKey(),
                 decision,
                 evaluatedAt,
-                Map.of()
+                candidateAttributes(configuration)
         );
 
         List<NotificationResult> results = deliver(configuration, candidate);
         NotificationState attempted = notificationState.attemptedAt(evaluatedAt);
-        notificationStates.put(configuration.id(), deliveryPolicy.isSuccessful(results) ? attempted.sentAt(evaluatedAt) : attempted);
+        notificationStates.put(serverGuid, deliveryPolicy.isSuccessful(results) ? attempted.sentAt(evaluatedAt) : attempted);
     }
 
     private List<NotificationResult> deliver(MonitoredServer server, NotificationCandidate candidate) {
@@ -116,7 +121,15 @@ public class NotificationOrchestrator {
         }
         log.info(
                 "NOTIFICATION DECISION | server='{}' | serverId={} | approved={}",
-                snapshot.name(), server.id(), decision.approved()
+                server.displayName() == null ? snapshot.serverGuid() : server.displayName(), server.id(), decision.approved()
         );
+    }
+
+    private Map<String, Object> candidateAttributes(MonitoredServer configuration) {
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        if (configuration.displayName() != null && !configuration.displayName().isBlank()) {
+            attributes.put("displayName", configuration.displayName());
+        }
+        return attributes;
     }
 }

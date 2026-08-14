@@ -2,6 +2,7 @@ package com.yurepires.lazydeploy.battlefield;
 
 import com.yurepires.lazydeploy.config.LazyDeployProperties;
 import com.yurepires.lazydeploy.battlefield.dto.Bf4ServerPageResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -11,7 +12,7 @@ public class BfListClient {
     private final WebClient webClient;
     private final LazyDeployProperties properties;
 
-    public BfListClient(WebClient webClient, LazyDeployProperties properties) {
+    public BfListClient(@Qualifier("bfListWebClient") WebClient webClient, LazyDeployProperties properties) {
         this.webClient = webClient;
         this.properties = properties;
     }

@@ -1,13 +1,13 @@
 package com.yurepires.lazydeploy.domain.monitoring;
 
-import com.yurepires.lazydeploy.domain.server.ServerSnapshot;
-
 import java.time.Instant;
+import java.util.UUID;
 
 public record ServerState(
-        String serverId,
-        ServerSnapshot snapshot,
-        String stateIdentity,
-        Instant firstObservedAt,
+        String serverGuid,
+        UUID roundInstanceId,
+        String mapId,
+        long previousRoundTimeSeconds,
+        Instant roundDetectedAt,
         Instant lastObservedAt
 ) {}

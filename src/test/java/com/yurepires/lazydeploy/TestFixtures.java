@@ -5,8 +5,6 @@ import com.yurepires.lazydeploy.domain.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.domain.server.MapSnapshot;
 import com.yurepires.lazydeploy.domain.server.MonitoredServer;
 import com.yurepires.lazydeploy.domain.server.PlayerSnapshot;
-import com.yurepires.lazydeploy.domain.server.RoundSnapshot;
-import com.yurepires.lazydeploy.domain.server.ServerAddress;
 import com.yurepires.lazydeploy.domain.server.ServerIdentifiers;
 import com.yurepires.lazydeploy.domain.server.ServerSnapshot;
 
@@ -36,13 +34,12 @@ public final class TestFixtures {
     public static ServerSnapshot snapshot(String guid, String map, int players) {
         return new ServerSnapshot(
                 guid,
-                new ServerAddress("10.0.0.1", 25226),
-                "Server",
-                new MapSnapshot(map, map),
-                new PlayerSnapshot(players, 64),
+                new MapSnapshot(map, map, map),
+                new PlayerSnapshot(players, 64, 0),
                 "CONQUEST",
-                new RoundSnapshot(0, 1, 300),
-                Instant.parse("2026-08-12T12:00:00Z")
+                300,
+                Instant.parse("2026-08-12T12:00:00Z"),
+                Map.of("address", "10.0.0.1:25226", "name", "Server")
         );
     }
 

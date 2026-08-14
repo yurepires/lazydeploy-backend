@@ -15,11 +15,13 @@ public record ServerCatalogSnapshot(
         Map<String, ServerSnapshot> byGuid = new LinkedHashMap<>();
         Map<ServerAddress, ServerSnapshot> byAddress = new LinkedHashMap<>();
         servers.forEach(server -> {
-            if (server.externalGuid() != null && !server.externalGuid().isBlank()) {
-                byGuid.putIfAbsent(server.externalGuid(), server);
+            if (server.serverGuid() != null && !server.serverGuid().isBlank()) {
+                byGuid.putIfAbsent(server.serverGuid(), server);
             }
-            if (server.address() != null) {
-                byAddress.putIfAbsent(server.address(), server);
+            Object address = server.externalMetadata().get("address");
+            if (address instanceof String value && value.contains(":")) {
+                int separator = value.lastIndexOf(':');
+                byAddress.putIfAbsent(new ServerAddress(value.substring(0, separator), Integer.parseInt(value.substring(separator + 1))), server);
             }
         });
         return new ServerCatalogSnapshot(

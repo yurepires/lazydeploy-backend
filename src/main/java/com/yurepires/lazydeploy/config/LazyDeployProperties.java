@@ -11,6 +11,7 @@ public record LazyDeployProperties(
         String baseUrl,
         Api api,
         Monitoring monitoring,
+        Providers providers,
         List<MonitoredServer> servers,
         Channels channels
 ) {
@@ -20,7 +21,17 @@ public record LazyDeployProperties(
 
     public record Api(int pageSize) {}
 
-    public record Monitoring(Duration interval) {}
+    public record Monitoring(
+            Duration interval,
+            long roundResetThresholdSeconds,
+            Duration maxObservationGap
+    ) {}
+
+    public record Providers(GameTools gameTools, BattlelogKeeper battlelogKeeper) {}
+
+    public record GameTools(String baseUrl) {}
+
+    public record BattlelogKeeper(String baseUrl) {}
 
     public record Channels(Email email) {}
 

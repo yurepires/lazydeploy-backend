@@ -1,14 +1,18 @@
 package com.yurepires.lazydeploy.domain.server;
 
 import java.time.Instant;
+import java.util.Map;
 
 public record ServerSnapshot(
-        String externalGuid,
-        ServerAddress address,
-        String name,
+        String serverGuid,
         MapSnapshot map,
         PlayerSnapshot players,
         String gameMode,
-        RoundSnapshot round,
-        Instant capturedAt
-) {}
+        long roundTimeSeconds,
+        Instant capturedAt,
+        Map<String, Object> externalMetadata
+) {
+    public ServerSnapshot {
+        externalMetadata = externalMetadata == null ? Map.of() : Map.copyOf(externalMetadata);
+    }
+}

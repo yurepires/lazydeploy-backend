@@ -23,7 +23,7 @@ class LazyDeployApplicationTests {
     @Test
     void evaluatesMapInUsingValuesBoundFromApplicationYaml() {
         var server = properties.servers().stream()
-                .filter(candidate -> candidate.id().equals("server-5"))
+                .filter(candidate -> candidate.id().equals("lost"))
                 .findFirst()
                 .orElseThrow();
         var rule = server.rules().stream()
@@ -35,7 +35,7 @@ class LazyDeployApplicationTests {
                 server,
                 snapshot,
                 null,
-                NotificationState.pending(server.id(), "state"),
+                NotificationState.pending(server.identifiers().guid(), java.util.UUID.randomUUID()),
                 java.time.Instant.now()
         );
 

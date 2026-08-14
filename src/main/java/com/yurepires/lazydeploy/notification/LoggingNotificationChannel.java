@@ -12,7 +12,6 @@ import java.time.Instant;
 
 @Component
 public class LoggingNotificationChannel implements NotificationChannel {
-
     private static final Logger log = LoggerFactory.getLogger(LoggingNotificationChannel.class);
 
     @Override
@@ -22,14 +21,13 @@ public class LoggingNotificationChannel implements NotificationChannel {
 
     @Override
     public NotificationResult send(NotificationCandidate candidate, NotificationChannelConfiguration configuration) {
-        log.info(
-                "NOTIFICATION | server='{}' | map='{}' | players={}/{} | state={}",
-                candidate.server().name(),
-                candidate.server().map().label(),
-                candidate.server().players().current(),
-                candidate.server().players().maximum(),
-                candidate.stateIdentity()
-        );
+        Object serverName = candidate.attributes().getOrDefault("displayName", candidate.server().serverGuid());
+        String mapName = candidate.server().map().displayName() == null
+                ? candidate.server().map().normalizedId()
+                : candidate.server().map().displayName();
+        log.info("NOTIFICATION | server='{}' | map='{}' | players={}/{} | round={}",
+                serverName, mapName, candidate.server().players().current(),
+                candidate.server().players().maximum(), candidate.stateIdentity());
         return NotificationResult.success(type(), Instant.now());
     }
 }

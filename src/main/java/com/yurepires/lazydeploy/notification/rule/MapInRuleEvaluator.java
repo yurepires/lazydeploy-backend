@@ -22,14 +22,14 @@ public class MapInRuleEvaluator implements RuleEvaluator {
     public RuleEvaluationResult evaluate(NotificationRuleDefinition rule, EvaluationContext context) {
         Object configured = rule.parameters().get("values");
         List<String> configuredMaps = parameterValues(configured);
-        boolean matched = configuredMaps.stream().anyMatch(context.currentSnapshot().map().id()::equals);
+        boolean matched = configuredMaps.stream().anyMatch(context.currentSnapshot().map().normalizedId()::equals);
 
         return new RuleEvaluationResult(
                 matched,
                 rule.type(),
                 matched ? "MAP_MATCHED" : "MAP_NOT_MATCHED",
                 Map.of(
-                        "map", context.currentSnapshot().map().id(),
+                        "map", context.currentSnapshot().map().normalizedId(),
                         "configuredMaps", configuredMaps
                 )
         );

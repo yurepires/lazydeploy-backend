@@ -60,7 +60,11 @@ class EmailNotificationChannelTest {
         return new LazyDeployProperties(
                 "https://api.bflist.io/v2/bf4",
                 new LazyDeployProperties.Api(100),
-                new LazyDeployProperties.Monitoring(Duration.ofSeconds(30)),
+                new LazyDeployProperties.Monitoring(Duration.ofSeconds(30), 30, Duration.ofMinutes(5)),
+                new LazyDeployProperties.Providers(
+                        new LazyDeployProperties.GameTools("https://api.gametools.network"),
+                        new LazyDeployProperties.BattlelogKeeper("https://keeper.battlelog.com")
+                ),
                 List.of(),
                 new LazyDeployProperties.Channels(
                         new LazyDeployProperties.Email("from@example.com")

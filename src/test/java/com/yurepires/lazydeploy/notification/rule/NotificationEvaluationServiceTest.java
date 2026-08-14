@@ -87,7 +87,7 @@ class NotificationEvaluationServiceTest {
                 server,
                 snapshot("guid", map, players),
                 null,
-                NotificationState.pending(server.id(), "state"),
+                NotificationState.pending(server.identifiers().guid(), java.util.UUID.randomUUID()),
                 now
         );
     }

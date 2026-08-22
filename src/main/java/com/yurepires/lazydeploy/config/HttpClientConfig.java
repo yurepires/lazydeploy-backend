@@ -11,23 +11,19 @@ import java.time.Clock;
 public class HttpClientConfig {
 
     @Bean
-    @Qualifier("bfListWebClient")
-    public WebClient bfListWebClient(LazyDeployProperties properties) {
-        return WebClient.builder()
-                .baseUrl(properties.baseUrl())
-                .build();
-    }
-
-    @Bean
     @Qualifier("gameToolsWebClient")
     public WebClient gameToolsWebClient(LazyDeployProperties properties) {
-        return WebClient.builder().baseUrl(properties.providers().gameTools().baseUrl()).build();
+        return WebClient.builder()
+                .baseUrl(properties.gameToolsBaseUrl())
+                .build();
     }
 
     @Bean
     @Qualifier("keeperWebClient")
     public WebClient keeperWebClient(LazyDeployProperties properties) {
-        return WebClient.builder().baseUrl(properties.providers().battlelogKeeper().baseUrl()).build();
+        return WebClient.builder()
+                .baseUrl(properties.battlelogKeeperBaseUrl())
+                .build();
     }
 
     @Bean

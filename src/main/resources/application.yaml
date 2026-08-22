@@ -1,6 +1,18 @@
 spring:
   application:
     name: lazy-deploy
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/lazydeploy}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
   mail:
     host: ${MAIL_HOST:}
     port: ${MAIL_PORT:587}
@@ -10,109 +22,19 @@ spring:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
 
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax
+
 lazydeploy:
-  base-url: https://api.bflist.io/v2/bf4
-  api:
-    page-size: 100
+  game-tools-base-url: https://api.gametools.network
+  battlelog-keeper-base-url: https://keeper.battlelog.com
+  email-from: ${MAIL_FROM:${MAIL_USERNAME:}}
   monitoring:
     interval: 30s
     round-reset-threshold-seconds: 30
     max-observation-gap: 5m
-  providers:
-    game-tools:
-      base-url: https://api.gametools.network
-    battlelog-keeper:
-      base-url: https://keeper.battlelog.com
-  channels:
-    email:
-      from: ${MAIL_FROM:${MAIL_USERNAME:}}
-  servers:
-    - id: dkg
-      enabled: true
-      display-name: "DKG-1*-DarkGaming*60Hz BEST*CONQUEST & *DLCs|#2XP"
-      identifiers:
-        guid: 9138463d-f3af-47b0-a42e-4d33da4ec9f1
-      rules: &default-rules
-        - type: MAP_IN
-          enabled: true
-          parameters:
-            values: &favorite-maps
-              - MP_Prison
-              - XP0_Metro
-              - XP3_MarketPl
-              - XP1_003
-              - XP2_004
-              - MP_Abandoned
-              - MP_Tremors
-              - MP_Flooded
-        - type: PLAYER_COUNT_AT_LEAST
-          enabled: true
-          parameters:
-            value: 55
-      notification-channels: &default-channels
-        - type: LOGGING
-          enabled: ${LOGGING_NOTIFICATION_ENABLED:true}
-        - type: EMAIL
-          enabled: true
-          parameters:
-            to: ${NOTIFICATION_EMAIL:}
-
-    - id: lost
-      enabled: true
-      display-name: "! -LOST- CONQUEST CLASSICS | ALL MAPS | 60Hz !"
-      identifiers:
-        guid: 494eef2a-0155-4df3-91b0-58f565cc5f53
-      rules:
-        - type: MAP_IN
-          enabled: true
-          parameters:
-            values: *favorite-maps
-        - type: PLAYER_COUNT_AT_LEAST
-          enabled: true
-          parameters:
-            value: 55
-      notification-channels: *default-channels
-#
-#    - id: server-3
-#      enabled: true
-#      identifiers:
-#        guid: 58fb3dfa-6e01-40c0-b4e8-d4bdeb07e646
-#      rules: &fifty-player-rules
-#        - type: MAP_IN
-#          enabled: true
-#          parameters:
-#            values: *favorite-maps
-#        - type: PLAYER_COUNT_AT_LEAST
-#          enabled: true
-#          parameters:
-#            value: 50
-#      notification-channels: *default-channels
-#
-#    - id: server-4
-#      enabled: true
-#      identifiers:
-#        guid: 74cd6f06-a696-4157-979c-fb594f00362d
-#      rules: *fifty-player-rules
-#      notification-channels: *default-channels
-#
-#    - id: server-5
-#      enabled: true
-#      identifiers:
-#        guid: 98a60c12-be3b-45fa-a8c7-b96fa9efb503
-#      rules: *fifty-player-rules
-#      notification-channels: *default-channels
-#
-#    - id: server-6
-#      enabled: true
-#      identifiers:
-#        guid: c4fad2a1-5336-4f1c-9b14-730ff588ff9d
-#      rules:
-#        - type: MAP_IN
-#          enabled: true
-#          parameters:
-#            values: *favorite-maps
-#        - type: PLAYER_COUNT_AT_LEAST
-#          enabled: true
-#          parameters:
-#            value: 40
-#      notification-channels: *default-channels

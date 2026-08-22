@@ -1,9 +1,6 @@
 package com.yurepires.lazydeploy;
 
 import com.yurepires.lazydeploy.config.LazyDeployProperties;
-import com.yurepires.lazydeploy.domain.monitoring.NotificationState;
-import com.yurepires.lazydeploy.domain.rule.EvaluationContext;
-import com.yurepires.lazydeploy.notification.rule.MapInRuleEvaluator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,25 +18,11 @@ class LazyDeployApplicationTests {
     }
 
     @Test
-    void evaluatesMapInUsingValuesBoundFromApplicationYaml() {
-        var server = properties.servers().stream()
-                .filter(candidate -> candidate.id().equals("lost"))
-                .findFirst()
-                .orElseThrow();
-        var rule = server.rules().stream()
-                .filter(candidate -> candidate.type().equals("MAP_IN"))
-                .findFirst()
-                .orElseThrow();
-        var snapshot = TestFixtures.snapshot(server.identifiers().guid(), "XP0_Metro", 59);
-        var context = new EvaluationContext(
-                server,
-                snapshot,
-                null,
-                NotificationState.pending(server.identifiers().guid(), java.util.UUID.randomUUID()),
-                java.time.Instant.now()
-        );
-
-        assertThat(new MapInRuleEvaluator().evaluate(rule, context).matched()).isTrue();
+    void bindsInfrastructureOnlyConfiguration() {
+        assertThat(properties.monitoring().roundResetThresholdSeconds()).isEqualTo(30);
+        assertThat(properties.battlelogKeeperBaseUrl()).contains("battlelog.com");
+        assertThat(properties.gameToolsBaseUrl()).contains("gametools.network");
+        assertThat(properties.emailFrom()).isEqualTo("test@example.com");
     }
 
 }

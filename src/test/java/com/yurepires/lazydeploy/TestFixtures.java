@@ -1,12 +1,12 @@
 package com.yurepires.lazydeploy;
 
-import com.yurepires.lazydeploy.domain.notification.NotificationChannelConfiguration;
-import com.yurepires.lazydeploy.domain.rule.NotificationRuleDefinition;
-import com.yurepires.lazydeploy.domain.server.MapSnapshot;
-import com.yurepires.lazydeploy.domain.server.MonitoredServer;
-import com.yurepires.lazydeploy.domain.server.PlayerSnapshot;
-import com.yurepires.lazydeploy.domain.server.ServerIdentifiers;
-import com.yurepires.lazydeploy.domain.server.ServerSnapshot;
+import com.yurepires.lazydeploy.model.notification.NotificationChannelConfiguration;
+import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
+import com.yurepires.lazydeploy.model.server.MapSnapshot;
+import com.yurepires.lazydeploy.model.server.MonitoredServer;
+import com.yurepires.lazydeploy.model.server.PlayerSnapshot;
+import com.yurepires.lazydeploy.model.server.ServerIdentifiers;
+import com.yurepires.lazydeploy.model.server.ServerSnapshot;
 
 import java.time.Instant;
 import java.util.List;

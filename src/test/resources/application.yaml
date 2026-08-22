@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:lazydeploy;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+lazydeploy:
+  game-tools-base-url: https://api.gametools.network
+  battlelog-keeper-base-url: https://keeper.battlelog.com
+  email-from: test@example.com
+  monitoring:
+    interval: 30s
+    round-reset-threshold-seconds: 30
+    max-observation-gap: 5m

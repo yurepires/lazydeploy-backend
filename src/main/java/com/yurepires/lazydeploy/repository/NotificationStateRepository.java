@@ -10,4 +10,6 @@ public interface NotificationStateRepository extends JpaRepository<NotificationS
 
     Optional<NotificationStateEntity> findBySubscriptionIdAndRoundInstanceId(UUID subscriptionId, UUID roundInstanceId);
 
+    void deleteAllBySubscriptionId(UUID subscriptionId);
+
 }

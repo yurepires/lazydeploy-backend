@@ -1,8 +1,18 @@
 package com.yurepires.lazydeploy.controller;
 
-import com.yurepires.lazydeploy.dto.request.NotificationRuleRequest;
-import com.yurepires.lazydeploy.dto.request.SubscriptionCreationRequest;
+import com.yurepires.lazydeploy.dto.request.CreateChannelRequest;
+import com.yurepires.lazydeploy.dto.request.CreateRuleRequest;
+import com.yurepires.lazydeploy.dto.request.CreateSubscriptionRequest;
+import com.yurepires.lazydeploy.dto.request.PatchChannelRequest;
+import com.yurepires.lazydeploy.dto.request.PatchRuleRequest;
+import com.yurepires.lazydeploy.dto.request.PatchSubscriptionRequest;
+import com.yurepires.lazydeploy.dto.request.UpdateChannelRequest;
+import com.yurepires.lazydeploy.dto.request.UpdateRuleRequest;
+import com.yurepires.lazydeploy.dto.request.UpdateSubscriptionRequest;
+import com.yurepires.lazydeploy.dto.response.ChannelResponse;
+import com.yurepires.lazydeploy.dto.response.RuleResponse;
 import com.yurepires.lazydeploy.dto.response.SubscriptionResponse;
+import com.yurepires.lazydeploy.model.notification.NotificationChannelConfiguration;
 import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.security.CurrentUserProvider;
 import com.yurepires.lazydeploy.service.subscription.SubscriptionApplicationService;
@@ -11,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,19 +39,14 @@ public class SubscriptionController {
     private final SubscriptionApplicationService subscriptionService;
     private final CurrentUserProvider currentUserProvider;
 
-    public SubscriptionController(
-            SubscriptionApplicationService subscriptionService,
-            CurrentUserProvider currentUserProvider
-    ) {
+    public SubscriptionController(SubscriptionApplicationService subscriptionService, CurrentUserProvider currentUserProvider) {
         this.subscriptionService = subscriptionService;
         this.currentUserProvider = currentUserProvider;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public SubscriptionResponse create(
-            @Valid @RequestBody SubscriptionCreationRequest request
-    ) {
+    public SubscriptionResponse create(@Valid @RequestBody CreateSubscriptionRequest request) {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
         return SubscriptionResponse.from(subscriptionService.create(currentUserId, request));
     }
@@ -60,6 +66,18 @@ public class SubscriptionController {
         return SubscriptionResponse.from(subscriptionService.get(currentUserId, id));
     }
 
+    @PutMapping("/{id}")
+    public SubscriptionResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateSubscriptionRequest request) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        return SubscriptionResponse.from(subscriptionService.update(currentUserId, id, request.enabled()));
+    }
+
+    @PatchMapping("/{id}")
+    public SubscriptionResponse patch(@PathVariable UUID id, @Valid @RequestBody PatchSubscriptionRequest request) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        return SubscriptionResponse.from(subscriptionService.update(currentUserId, id, request.enabled()));
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
@@ -68,37 +86,89 @@ public class SubscriptionController {
     }
 
     @GetMapping("/{id}/rules")
-    public List<NotificationRuleDefinition> rules(@PathVariable UUID id) {
+    public List<RuleResponse> rules(@PathVariable UUID id) {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
-        return subscriptionService.get(currentUserId, id).rules();
+        return subscriptionService.listRules(currentUserId, id).stream()
+                .map(RuleResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/{id}/rules/{ruleId}")
+    public RuleResponse getRule(@PathVariable UUID id, @PathVariable UUID ruleId) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        return RuleResponse.from(subscriptionService.getRule(currentUserId, id, ruleId));
     }
 
     @PostMapping("/{id}/rules")
     @ResponseStatus(HttpStatus.CREATED)
-    public List<NotificationRuleDefinition> addRule(
-            @PathVariable UUID id,
-            @Valid @RequestBody NotificationRuleRequest request
-    ) {
+    public RuleResponse addRule(@PathVariable UUID id, @Valid @RequestBody CreateRuleRequest request) {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
-        return subscriptionService.addRule(currentUserId, id, request).rules();
+        NotificationRuleDefinition rule = subscriptionService.createRule(currentUserId, id, request);
+        return RuleResponse.from(rule);
     }
 
     @PutMapping("/{id}/rules/{ruleId}")
-    public List<NotificationRuleDefinition> updateRule(
-            @PathVariable UUID id,
-            @PathVariable UUID ruleId,
-            @Valid @RequestBody NotificationRuleRequest request
-    ) {
+    public RuleResponse updateRule(@PathVariable UUID id, @PathVariable UUID ruleId, @Valid @RequestBody UpdateRuleRequest request) {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
-        return subscriptionService.updateRule(currentUserId, id, ruleId, request).rules();
+        subscriptionService.updateRule(currentUserId, id, ruleId, request);
+        return RuleResponse.from(subscriptionService.getRule(currentUserId, id, ruleId));
+    }
+
+    @PatchMapping("/{id}/rules/{ruleId}")
+    public RuleResponse patchRule(@PathVariable UUID id, @PathVariable UUID ruleId, @Valid @RequestBody PatchRuleRequest request) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        subscriptionService.patchRule(currentUserId, id, ruleId, request);
+        return RuleResponse.from(subscriptionService.getRule(currentUserId, id, ruleId));
     }
 
     @DeleteMapping("/{id}/rules/{ruleId}")
-    public List<NotificationRuleDefinition> deleteRule(
-            @PathVariable UUID id,
-            @PathVariable UUID ruleId
-    ) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteRule(@PathVariable UUID id, @PathVariable UUID ruleId) {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
-        return subscriptionService.deleteRule(currentUserId, id, ruleId).rules();
+        subscriptionService.deleteRule(currentUserId, id, ruleId);
     }
+
+    @PostMapping("/{id}/channels")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ChannelResponse addChannel(@PathVariable UUID id, @Valid @RequestBody CreateChannelRequest request) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        NotificationChannelConfiguration channel = subscriptionService.createChannel(currentUserId, id, request);
+        return ChannelResponse.from(channel);
+    }
+
+    @GetMapping("/{id}/channels")
+    public List<ChannelResponse> channels(@PathVariable UUID id) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        return subscriptionService.listChannels(currentUserId, id).stream()
+                .map(ChannelResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/{id}/channels/{channelId}")
+    public ChannelResponse getChannel(@PathVariable UUID id, @PathVariable UUID channelId) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        return ChannelResponse.from(subscriptionService.getChannel(currentUserId, id, channelId));
+    }
+
+    @PutMapping("/{id}/channels/{channelId}")
+    public ChannelResponse updateChannel(@PathVariable UUID id, @PathVariable UUID channelId, @Valid @RequestBody UpdateChannelRequest request) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        subscriptionService.updateChannel(currentUserId, id, channelId, request);
+        return ChannelResponse.from(subscriptionService.getChannel(currentUserId, id, channelId));
+    }
+
+    @PatchMapping("/{id}/channels/{channelId}")
+    public ChannelResponse patchChannel(@PathVariable UUID id, @PathVariable UUID channelId, @Valid @RequestBody PatchChannelRequest request) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        subscriptionService.patchChannel(currentUserId, id, channelId, request);
+        return ChannelResponse.from(subscriptionService.getChannel(currentUserId, id, channelId));
+    }
+
+    @DeleteMapping("/{id}/channels/{channelId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteChannel(@PathVariable UUID id, @PathVariable UUID channelId) {
+        UUID currentUserId = currentUserProvider.getCurrentUserId();
+        subscriptionService.deleteChannel(currentUserId, id, channelId);
+    }
+
 }

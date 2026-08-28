@@ -4,7 +4,6 @@ import com.yurepires.lazydeploy.entity.NotificationDeliveryAttemptEntity;
 import com.yurepires.lazydeploy.entity.NotificationStateEntity;
 import com.yurepires.lazydeploy.mapper.MonitoringMapper;
 import com.yurepires.lazydeploy.mapper.NotificationDeliveryAttemptMapper;
-import com.yurepires.lazydeploy.model.monitoring.NotificationState;
 import com.yurepires.lazydeploy.model.monitoring.ServerState;
 import com.yurepires.lazydeploy.model.notification.NotificationCandidate;
 import com.yurepires.lazydeploy.model.notification.NotificationChannel;

@@ -2,6 +2,8 @@ package com.yurepires.lazydeploy.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public record NotificationRuleRequest(
@@ -13,7 +15,9 @@ public record NotificationRuleRequest(
         if (parameters == null) {
             parameters = Map.of();
         } else {
-            parameters = Map.copyOf(parameters);
+            parameters = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(parameters)
+            );
         }
     }
 }

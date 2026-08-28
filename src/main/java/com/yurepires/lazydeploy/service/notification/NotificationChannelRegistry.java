@@ -1,5 +1,6 @@
 package com.yurepires.lazydeploy.service.notification;
 
+import com.yurepires.lazydeploy.exception.UnsupportedChannelTypeException;
 import com.yurepires.lazydeploy.model.notification.NotificationChannel;
 import org.springframework.stereotype.Component;
 
@@ -18,8 +19,6 @@ public class NotificationChannelRegistry {
         return channels.stream()
                 .filter(channel -> channel.type().equalsIgnoreCase(type))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Nenhum NotificationChannel registrado para o tipo " + type
-                ));
+                .orElseThrow(() -> new UnsupportedChannelTypeException(type));
     }
 }

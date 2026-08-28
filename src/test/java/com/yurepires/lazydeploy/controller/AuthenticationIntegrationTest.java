@@ -72,7 +72,7 @@ class AuthenticationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerBody("not-an-email", "short")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -108,7 +108,7 @@ class AuthenticationIntegrationTest {
                         .content(loginBody(email, "wrong-password")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
-                .andExpect(jsonPath("$.message").value("Email ou senha inválidos"));
+                .andExpect(jsonPath("$.detail").value("Email ou senha inválidos"));
     }
 
     @Test
@@ -119,7 +119,7 @@ class AuthenticationIntegrationTest {
                         .content(loginBody(uniqueEmail(), "password-123")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
-                .andExpect(jsonPath("$.message").value("Email ou senha inválidos"));
+                .andExpect(jsonPath("$.detail").value("Email ou senha inválidos"));
     }
 
     @Test

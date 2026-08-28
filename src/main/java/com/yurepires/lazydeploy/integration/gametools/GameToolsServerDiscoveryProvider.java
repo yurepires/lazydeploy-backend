@@ -1,5 +1,6 @@
 package com.yurepires.lazydeploy.integration.gametools;
 
+import com.yurepires.lazydeploy.exception.ExternalProviderUnavailableException;
 import com.yurepires.lazydeploy.model.server.ServerDiscoveryProvider;
 import com.yurepires.lazydeploy.model.server.ServerReference;
 import com.yurepires.lazydeploy.model.server.ServerSearchQuery;
@@ -51,10 +52,14 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
                     .toList();
         } catch (WebClientResponseException exception) {
             log.warn("Falha HTTP no GameTools | status={}", exception.getStatusCode().value());
-            return List.of();
+            throw new ExternalProviderUnavailableException(
+                    "O GameTools está temporariamente indisponível"
+            );
         } catch (RuntimeException exception) {
             log.warn("Falha ao buscar servidores no GameTools: {}", exception.getMessage());
-            return List.of();
+            throw new ExternalProviderUnavailableException(
+                    "Não foi possível consultar o GameTools"
+            );
         }
     }
 

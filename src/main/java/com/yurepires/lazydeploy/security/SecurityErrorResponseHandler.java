@@ -1,18 +1,19 @@
 package com.yurepires.lazydeploy.security;
 
-import com.yurepires.lazydeploy.dto.response.ErrorResponse;
+import com.yurepires.lazydeploy.exception.ProblemDetailFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
-import java.time.Instant;
-import java.util.List;
 
 @Component
 public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, AccessDeniedHandler {
@@ -31,7 +32,7 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
     ) throws IOException {
         writeResponse(
                 response,
-                HttpServletResponse.SC_UNAUTHORIZED,
+                HttpStatus.UNAUTHORIZED,
                 "UNAUTHENTICATED",
                 "Sessão inexistente ou expirada",
                 request.getRequestURI()
@@ -44,38 +45,41 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
             HttpServletResponse response,
             AccessDeniedException exception
     ) throws IOException {
+        String errorCode = "ACCESS_DENIED";
+        String message = "Acesso negado";
+        if (exception instanceof CsrfException) {
+            errorCode = "CSRF_VALIDATION_FAILED";
+            message = "Token CSRF inválido ou ausente";
+        }
+
         writeResponse(
                 response,
-                HttpServletResponse.SC_FORBIDDEN,
-                "ACCESS_DENIED",
-                "Acesso negado ou token CSRF inválido",
+                HttpStatus.FORBIDDEN,
+                errorCode,
+                message,
                 request.getRequestURI()
         );
     }
 
     private void writeResponse(
             HttpServletResponse response,
-            int status,
+            HttpStatus status,
             String code,
             String message,
             String path
     ) throws IOException {
-        String reason = "Unauthorized";
-        if (status == HttpServletResponse.SC_FORBIDDEN) {
-            reason = "Forbidden";
-        }
-
-        ErrorResponse errorResponse = new ErrorResponse(
-                Instant.now(),
+        ProblemDetail problemDetail = ProblemDetailFactory.create(
                 status,
-                reason,
-                code,
+                status == HttpStatus.UNAUTHORIZED
+                        ? "Authentication required"
+                        : "Access denied",
                 message,
+                code,
                 path,
-                List.of()
+                java.util.List.of()
         );
-        response.setStatus(status);
-        response.setContentType("application/json");
-        response.getWriter().write(objectMapper.writeValueAsString(errorResponse));
+        response.setStatus(status.value());
+        response.setContentType("application/problem+json");
+        response.getWriter().write(objectMapper.writeValueAsString(problemDetail));
     }
 }

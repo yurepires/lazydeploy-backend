@@ -1,6 +1,7 @@
 package com.yurepires.lazydeploy.integration.gametools;
 
 
+import com.yurepires.lazydeploy.model.server.ServerReference;
 import com.yurepires.lazydeploy.model.server.ServerSearchQuery;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -41,8 +42,8 @@ class GameToolsServerDiscoveryProviderTest {
         var results = provider(response).search(new ServerSearchQuery("server", 10));
 
         assertThat(results).hasSize(2);
-        assertThat(results).extracting(server -> server.externalGuid()).containsExactly("guid-1", "guid-2");
-        assertThat(results).extracting(server -> server.displayName()).containsExactly("First", "Second");
+        assertThat(results).extracting(ServerReference::externalGuid).containsExactly("guid-1", "guid-2");
+        assertThat(results).extracting(ServerReference::displayName).containsExactly("First", "Second");
     }
 
     @Test

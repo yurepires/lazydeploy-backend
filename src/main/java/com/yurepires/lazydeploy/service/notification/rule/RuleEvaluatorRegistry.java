@@ -1,5 +1,6 @@
 package com.yurepires.lazydeploy.service.notification.rule;
 
+import com.yurepires.lazydeploy.exception.UnsupportedRuleTypeException;
 import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.model.rule.RuleEvaluator;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,6 @@ public class RuleEvaluatorRegistry {
         return evaluators.stream()
                 .filter(evaluator -> evaluator.supports(rule))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Nenhum RuleEvaluator registrado para a regra " + rule.type()));
+                .orElseThrow(() -> new UnsupportedRuleTypeException(rule.type()));
     }
 }

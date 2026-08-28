@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 class PersistenceIntegrationTest {
@@ -77,11 +78,11 @@ class PersistenceIntegrationTest {
 
         var firstSubscription = subscriptionService.create(firstUser.id(), firstRequest);
         var secondSubscription = subscriptionService.create(secondUser.id(), secondRequest);
-        var duplicateSubscription = subscriptionService.create(firstUser.id(), firstRequest);
+        assertThatThrownBy(() -> subscriptionService.create(firstUser.id(), firstRequest))
+                .isInstanceOf(com.yurepires.lazydeploy.exception.SubscriptionAlreadyExistsException.class);
 
         assertThat(firstSubscription.server().id()).isEqualTo(secondSubscription.server().id());
         assertThat(firstSubscription.id()).isNotEqualTo(secondSubscription.id());
-        assertThat(duplicateSubscription.id()).isEqualTo(firstSubscription.id());
         assertThat(firstSubscription.rules()).isNotEqualTo(secondSubscription.rules());
     }
 

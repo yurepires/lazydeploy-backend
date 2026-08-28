@@ -48,9 +48,17 @@ repita o valor no header `X-XSRF-TOKEN`.
 - `POST /api/bf4/subscriptions`
 - `GET /api/bf4/subscriptions`
 - `GET /api/bf4/subscriptions/{id}`
+- `PUT|PATCH /api/bf4/subscriptions/{id}`
 - `DELETE /api/bf4/subscriptions/{id}`
 - `GET|POST /api/bf4/subscriptions/{id}/rules`
-- `PUT|DELETE /api/bf4/subscriptions/{id}/rules/{ruleId}`
+- `GET|PUT|PATCH|DELETE /api/bf4/subscriptions/{id}/rules/{ruleId}`
+- `GET|POST /api/bf4/subscriptions/{id}/channels`
+- `GET|PUT|PATCH|DELETE /api/bf4/subscriptions/{id}/channels/{channelId}`
+
+As respostas de erro seguem o formato RFC 9457 (`ProblemDetail`), com os campos
+`errorCode`, `timestamp` e, quando aplicável, `fieldErrors`. Os tipos de regra
+disponíveis são `MAP_IN` e `PLAYER_COUNT_AT_LEAST`; o canal disponível nesta fase
+é `EMAIL`, configurado somente com o parâmetro `recipient`.
 
 Todos os endpoints em `/api/bf4/**`, exceto cadastro, login e obtenção do token
 CSRF, exigem autenticação. O logout exige uma sessão autenticada.
@@ -72,7 +80,3 @@ CSRF, exigem autenticação. O logout exige uma sessão autenticada.
 O acesso ao banco segue o fluxo `service -> repository -> entity`. Não existe uma
 camada adicional de adapters. Quando o service precisa trabalhar com um modelo de
 domínio, a conversão entre esse modelo e a entidade é feita por um mapper dedicado.
-
-Records são utilizados apenas em tipos de dados imutáveis, como valores do domínio,
-configurações e respostas de integrações. Controllers, services, entidades JPA e DTOs
-da API são classes separadas e ficam em arquivos próprios.

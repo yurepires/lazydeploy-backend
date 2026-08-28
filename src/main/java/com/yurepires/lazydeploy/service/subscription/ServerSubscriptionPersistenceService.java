@@ -19,6 +19,7 @@ import com.yurepires.lazydeploy.repository.NotificationChannelConfigurationRepos
 import com.yurepires.lazydeploy.repository.NotificationChannelParameterRepository;
 import com.yurepires.lazydeploy.repository.NotificationRuleParameterRepository;
 import com.yurepires.lazydeploy.repository.NotificationRuleRepository;
+import com.yurepires.lazydeploy.repository.NotificationStateRepository;
 import com.yurepires.lazydeploy.repository.ServerIdentifierRepository;
 import com.yurepires.lazydeploy.repository.ServerRepository;
 import com.yurepires.lazydeploy.repository.ServerSubscriptionRepository;
@@ -43,6 +44,7 @@ public class ServerSubscriptionPersistenceService {
     private final NotificationRuleParameterRepository ruleParameterRepository;
     private final NotificationChannelConfigurationRepository channelRepository;
     private final NotificationChannelParameterRepository channelParameterRepository;
+    private final NotificationStateRepository notificationStateRepository;
     private final ServerSubscriptionMapper subscriptionMapper;
     private final ServerMapper serverMapper;
     private final ParameterValueMapper parameterValueMapper;
@@ -55,6 +57,7 @@ public class ServerSubscriptionPersistenceService {
             NotificationRuleParameterRepository ruleParameterRepository,
             NotificationChannelConfigurationRepository channelRepository,
             NotificationChannelParameterRepository channelParameterRepository,
+            NotificationStateRepository notificationStateRepository,
             ServerSubscriptionMapper subscriptionMapper,
             ServerMapper serverMapper,
             ParameterValueMapper parameterValueMapper
@@ -66,6 +69,7 @@ public class ServerSubscriptionPersistenceService {
         this.ruleParameterRepository = ruleParameterRepository;
         this.channelRepository = channelRepository;
         this.channelParameterRepository = channelParameterRepository;
+        this.notificationStateRepository = notificationStateRepository;
         this.subscriptionMapper = subscriptionMapper;
         this.serverMapper = serverMapper;
         this.parameterValueMapper = parameterValueMapper;
@@ -99,6 +103,11 @@ public class ServerSubscriptionPersistenceService {
                 .map(this::mapSubscriptionToDomain);
     }
 
+    @Transactional(readOnly = true)
+    public boolean existsByUserIdAndServerId(UUID userId, UUID serverId) {
+        return subscriptionRepository.existsByUserIdAndServerId(userId, serverId);
+    }
+
     @Transactional
     public ServerSubscription save(ServerSubscription subscription) {
         ServerSubscriptionEntity subscriptionEntity = subscriptionMapper.toEntity(subscription);
@@ -111,9 +120,48 @@ public class ServerSubscriptionPersistenceService {
     }
 
     @Transactional
+    public ServerSubscription saveSubscription(ServerSubscription subscription) {
+        ServerSubscriptionEntity subscriptionEntity = subscriptionMapper.toEntity(subscription);
+        ServerSubscriptionEntity savedEntity = subscriptionRepository.saveAndFlush(subscriptionEntity);
+        return mapSubscriptionToDomain(savedEntity);
+    }
+
+    @Transactional
+    public ServerSubscription saveRules(
+            ServerSubscription currentSubscription,
+            List<NotificationRuleDefinition> rules
+    ) {
+        ServerSubscriptionEntity subscriptionEntity = subscriptionMapper.toEntity(currentSubscription);
+        ServerSubscriptionEntity savedEntity = subscriptionRepository.saveAndFlush(subscriptionEntity);
+        replaceRules(savedEntity.getId(), rules);
+
+        return mapSubscriptionToDomain(savedEntity);
+    }
+
+    @Transactional
+    public ServerSubscription saveChannels(
+            ServerSubscription currentSubscription,
+            List<NotificationChannelConfiguration> channels
+    ) {
+        ServerSubscriptionEntity subscriptionEntity = subscriptionMapper.toEntity(currentSubscription);
+        ServerSubscriptionEntity savedEntity = subscriptionRepository.saveAndFlush(subscriptionEntity);
+        replaceChannels(savedEntity.getId(), channels);
+
+        return mapSubscriptionToDomain(savedEntity);
+    }
+
+    @Transactional
     public void delete(UUID subscriptionId, UUID userId) {
-        subscriptionRepository.findByIdAndUserId(subscriptionId, userId)
-                .ifPresent(subscriptionRepository::delete);
+        Optional<ServerSubscriptionEntity> subscription = subscriptionRepository
+                .findByIdAndUserId(subscriptionId, userId);
+        if (subscription.isEmpty()) {
+            return;
+        }
+
+        deleteExistingRules(subscriptionId);
+        deleteExistingChannels(subscriptionId);
+        notificationStateRepository.deleteAllBySubscriptionId(subscriptionId);
+        subscriptionRepository.delete(subscription.get());
     }
 
     private void replaceRules(
@@ -125,9 +173,15 @@ public class ServerSubscriptionPersistenceService {
 
         for (NotificationRuleDefinition ruleDefinition : ruleDefinitions) {
             NotificationRuleDefinition definitionWithId = ensureRuleId(ruleDefinition);
+            Instant createdAt = definitionWithId.createdAt();
+            if (createdAt == null) {
+                createdAt = currentTime;
+            }
+
             NotificationRuleEntity ruleEntity = subscriptionMapper.toEntity(
                     definitionWithId,
                     subscriptionId,
+                    createdAt,
                     currentTime
             );
             ruleRepository.save(ruleEntity);
@@ -144,7 +198,9 @@ public class ServerSubscriptionPersistenceService {
                 UUID.randomUUID(),
                 definition.type(),
                 definition.enabled(),
-                definition.parameters()
+                definition.parameters(),
+                definition.createdAt(),
+                definition.updatedAt()
         );
     }
 
@@ -179,6 +235,7 @@ public class ServerSubscriptionPersistenceService {
             List<NotificationChannelConfiguration> channelConfigurations
     ) {
         deleteExistingChannels(subscriptionId);
+        Instant currentTime = Instant.now();
 
         for (NotificationChannelConfiguration channelConfiguration : channelConfigurations) {
             NotificationChannelConfiguration configurationWithId = ensureChannelId(
@@ -186,11 +243,24 @@ public class ServerSubscriptionPersistenceService {
             );
             NotificationChannelConfigurationEntity channelEntity = subscriptionMapper.toEntity(
                     configurationWithId,
-                    subscriptionId
+                    subscriptionId,
+                    createdAtFor(configurationWithId, currentTime),
+                    currentTime
             );
             channelRepository.save(channelEntity);
             saveChannelParameters(channelEntity.getId(), configurationWithId.parameters());
         }
+    }
+
+    private Instant createdAtFor(
+            NotificationChannelConfiguration configuration,
+            Instant fallback
+    ) {
+        if (configuration.createdAt() == null) {
+            return fallback;
+        }
+
+        return configuration.createdAt();
     }
 
     private NotificationChannelConfiguration ensureChannelId(
@@ -204,7 +274,9 @@ public class ServerSubscriptionPersistenceService {
                 UUID.randomUUID(),
                 configuration.type(),
                 configuration.enabled(),
-                configuration.parameters()
+                configuration.parameters(),
+                configuration.createdAt(),
+                configuration.updatedAt()
         );
     }
 

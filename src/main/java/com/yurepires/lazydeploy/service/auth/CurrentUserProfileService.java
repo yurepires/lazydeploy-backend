@@ -1,6 +1,7 @@
 package com.yurepires.lazydeploy.service.auth;
 
 import com.yurepires.lazydeploy.dto.response.AuthenticatedUserResponse;
+import com.yurepires.lazydeploy.entity.UserEntity;
 import com.yurepires.lazydeploy.exception.UserNotFoundException;
 import com.yurepires.lazydeploy.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -18,7 +19,7 @@ public class CurrentUserProfileService {
 
     public AuthenticatedUserResponse findById(UUID userId) {
         return userRepository.findById(userId)
-                .filter(user -> user.isEnabled())
+                .filter(UserEntity::isEnabled)
                 .map(user -> new AuthenticatedUserResponse(user.getId(), user.getEmail()))
                 .orElseThrow(UserNotFoundException::new);
     }

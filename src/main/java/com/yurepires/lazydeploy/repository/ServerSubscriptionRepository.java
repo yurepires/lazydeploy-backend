@@ -16,4 +16,6 @@ public interface ServerSubscriptionRepository extends JpaRepository<ServerSubscr
     Optional<ServerSubscriptionEntity> findByIdAndUserId(UUID id, UUID userId);
 
     Optional<ServerSubscriptionEntity> findByUserIdAndServerId(UUID userId, UUID serverId);
+
+    boolean existsByUserIdAndServerId(UUID userId, UUID serverId);
 }

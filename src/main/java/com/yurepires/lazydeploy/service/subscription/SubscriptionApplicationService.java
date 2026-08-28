@@ -1,9 +1,20 @@
 package com.yurepires.lazydeploy.service.subscription;
 
+import com.yurepires.lazydeploy.dto.request.CreateChannelRequest;
+import com.yurepires.lazydeploy.dto.request.CreateRuleRequest;
+import com.yurepires.lazydeploy.dto.request.CreateSubscriptionRequest;
 import com.yurepires.lazydeploy.dto.request.NotificationChannelRequest;
 import com.yurepires.lazydeploy.dto.request.NotificationRuleRequest;
+import com.yurepires.lazydeploy.dto.request.PatchChannelRequest;
+import com.yurepires.lazydeploy.dto.request.PatchRuleRequest;
 import com.yurepires.lazydeploy.dto.request.SubscriptionCreationRequest;
+import com.yurepires.lazydeploy.dto.request.UpdateChannelRequest;
+import com.yurepires.lazydeploy.dto.request.UpdateRuleRequest;
+import com.yurepires.lazydeploy.exception.ChannelAlreadyExistsException;
+import com.yurepires.lazydeploy.exception.InvalidRequestException;
+import com.yurepires.lazydeploy.exception.NotificationChannelNotFoundException;
 import com.yurepires.lazydeploy.exception.NotificationRuleNotFoundException;
+import com.yurepires.lazydeploy.exception.SubscriptionAlreadyExistsException;
 import com.yurepires.lazydeploy.exception.SubscriptionNotFoundException;
 import com.yurepires.lazydeploy.exception.UserNotFoundException;
 import com.yurepires.lazydeploy.mapper.ServerMapper;
@@ -17,14 +28,19 @@ import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.repository.ServerRepository;
 import com.yurepires.lazydeploy.repository.ServerIdentifierRepository;
 import com.yurepires.lazydeploy.repository.UserRepository;
+import com.yurepires.lazydeploy.service.validation.channel.ChannelConfigurationValidatorRegistry;
+import com.yurepires.lazydeploy.service.validation.rule.RuleDefinitionValidatorRegistry;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,6 +54,8 @@ public class SubscriptionApplicationService {
     private final UserMapper userMapper;
     private final ServerMapper serverMapper;
     private final Clock clock;
+    private final RuleDefinitionValidatorRegistry ruleValidatorRegistry;
+    private final ChannelConfigurationValidatorRegistry channelValidatorRegistry;
 
     public SubscriptionApplicationService(
             UserRepository userRepository,
@@ -47,7 +65,9 @@ public class SubscriptionApplicationService {
             NewServerTransaction newServerTransaction,
             UserMapper userMapper,
             ServerMapper serverMapper,
-            Clock clock
+            Clock clock,
+            RuleDefinitionValidatorRegistry ruleValidatorRegistry,
+            ChannelConfigurationValidatorRegistry channelValidatorRegistry
     ) {
         this.userRepository = userRepository;
         this.serverRepository = serverRepository;
@@ -57,17 +77,53 @@ public class SubscriptionApplicationService {
         this.userMapper = userMapper;
         this.serverMapper = serverMapper;
         this.clock = clock;
+        this.ruleValidatorRegistry = ruleValidatorRegistry;
+        this.channelValidatorRegistry = channelValidatorRegistry;
     }
 
     public ServerSubscription create(UUID userId, SubscriptionCreationRequest request) {
+        List<NotificationRuleDefinition> rules = createRuleDefinitions(request.rules());
+        List<NotificationChannelConfiguration> channels = createChannelConfigurations(
+                request.channels()
+        );
+
+        ServerSubscription subscription = create(
+                userId,
+                new CreateSubscriptionRequest(
+                        request.serverGuid(),
+                        request.displayName(),
+                        true
+                )
+        );
+
+        if (request.rules().isEmpty() && request.channels().isEmpty()) {
+            return subscription;
+        }
+
+        ServerSubscription configuredSubscription = new ServerSubscription(
+                subscription.id(),
+                subscription.userId(),
+                subscription.server(),
+                subscription.externalGuid(),
+                subscription.enabled(),
+                rules,
+                channels,
+                subscription.createdAt(),
+                subscription.updatedAt()
+        );
+
+        return subscriptionPersistenceService.save(configuredSubscription);
+    }
+
+    public ServerSubscription create(UUID userId, CreateSubscriptionRequest request) {
         User user = findEnabledUser(userId);
         Server server = resolveServer(request.serverGuid(), request.displayName());
 
-        Optional<ServerSubscription> existingSubscription = subscriptionPersistenceService
-                .findByUserIdAndServerId(user.id(), server.id());
+        boolean subscriptionAlreadyExists = subscriptionPersistenceService
+                .existsByUserIdAndServerId(user.id(), server.id());
 
-        if (existingSubscription.isPresent()) {
-            return existingSubscription.get();
+        if (subscriptionAlreadyExists) {
+            throw new SubscriptionAlreadyExistsException();
         }
 
         ServerSubscription subscription = createSubscription(user, server, request);
@@ -75,11 +131,7 @@ public class SubscriptionApplicationService {
         try {
             return subscriptionPersistenceService.save(subscription);
         } catch (DataIntegrityViolationException concurrentCreationException) {
-            return findSubscriptionCreatedConcurrently(
-                    user.id(),
-                    server.id(),
-                    concurrentCreationException
-            );
+            throw new SubscriptionAlreadyExistsException();
         }
     }
 
@@ -93,6 +145,33 @@ public class SubscriptionApplicationService {
                 .orElseThrow(SubscriptionNotFoundException::new);
     }
 
+    public ServerSubscription update(
+            UUID userId,
+            UUID subscriptionId,
+            Boolean enabled
+    ) {
+        if (enabled == null) {
+            throw new InvalidRequestException(
+                    "O campo enabled deve ser informado"
+            );
+        }
+
+        ServerSubscription currentSubscription = get(userId, subscriptionId);
+        ServerSubscription updatedSubscription = new ServerSubscription(
+                currentSubscription.id(),
+                currentSubscription.userId(),
+                currentSubscription.server(),
+                currentSubscription.externalGuid(),
+                enabled,
+                currentSubscription.rules(),
+                currentSubscription.channels(),
+                currentSubscription.createdAt(),
+                Instant.now(clock)
+        );
+
+        return subscriptionPersistenceService.saveSubscription(updatedSubscription);
+    }
+
     public void delete(UUID userId, UUID subscriptionId) {
         get(userId, subscriptionId);
         subscriptionPersistenceService.delete(subscriptionId, userId);
@@ -103,9 +182,54 @@ public class SubscriptionApplicationService {
             UUID subscriptionId,
             NotificationRuleRequest request
     ) {
+        return addRule(
+                userId,
+                subscriptionId,
+                new CreateRuleRequest(
+                        request.type(),
+                        request.enabled(),
+                        request.parameters()
+                )
+        );
+    }
+
+    public ServerSubscription addRule(
+            UUID userId,
+            UUID subscriptionId,
+            CreateRuleRequest request
+    ) {
+        return addRuleWithId(
+                userId,
+                subscriptionId,
+                UUID.randomUUID(),
+                request
+        );
+    }
+
+    public NotificationRuleDefinition createRule(
+            UUID userId,
+            UUID subscriptionId,
+            CreateRuleRequest request
+    ) {
+        UUID ruleId = UUID.randomUUID();
+        addRuleWithId(userId, subscriptionId, ruleId, request);
+        return getRule(userId, subscriptionId, ruleId);
+    }
+
+    private ServerSubscription addRuleWithId(
+            UUID userId,
+            UUID subscriptionId,
+            UUID ruleId,
+            CreateRuleRequest request
+    ) {
         ServerSubscription currentSubscription = get(userId, subscriptionId);
         List<NotificationRuleDefinition> updatedRules = new ArrayList<>(currentSubscription.rules());
-        updatedRules.add(createRuleDefinition(request));
+        updatedRules.add(createRuleDefinition(
+                ruleId,
+                request.type(),
+                request.enabled(),
+                request.parameters()
+        ));
 
         return saveWithRules(currentSubscription, updatedRules);
     }
@@ -116,13 +240,38 @@ public class SubscriptionApplicationService {
             UUID ruleId,
             NotificationRuleRequest request
     ) {
+        return updateRule(
+                userId,
+                subscriptionId,
+                ruleId,
+                new UpdateRuleRequest(
+                        request.type(),
+                        request.enabled(),
+                        request.parameters()
+                )
+        );
+    }
+
+    public ServerSubscription updateRule(
+            UUID userId,
+            UUID subscriptionId,
+            UUID ruleId,
+            UpdateRuleRequest request
+    ) {
         ServerSubscription currentSubscription = get(userId, subscriptionId);
         List<NotificationRuleDefinition> updatedRules = new ArrayList<>();
         boolean ruleWasFound = false;
 
         for (NotificationRuleDefinition currentRule : currentSubscription.rules()) {
             if (ruleId.equals(currentRule.id())) {
-                updatedRules.add(createRuleDefinition(ruleId, request));
+                updatedRules.add(createRuleDefinition(
+                        ruleId,
+                        request.type(),
+                        request.enabled(),
+                        request.parameters(),
+                        currentRule.createdAt(),
+                        currentRule.updatedAt()
+                ));
                 ruleWasFound = true;
             } else {
                 updatedRules.add(currentRule);
@@ -134,6 +283,231 @@ public class SubscriptionApplicationService {
         }
 
         return saveWithRules(currentSubscription, updatedRules);
+    }
+
+    public ServerSubscription patchRule(
+            UUID userId,
+            UUID subscriptionId,
+            UUID ruleId,
+            PatchRuleRequest request
+    ) {
+        if (request.enabled() == null) {
+            throw new InvalidRequestException(
+                    "O campo enabled deve ser informado"
+            );
+        }
+
+        ServerSubscription currentSubscription = get(userId, subscriptionId);
+        List<NotificationRuleDefinition> updatedRules = new ArrayList<>();
+        boolean ruleWasFound = false;
+
+        for (NotificationRuleDefinition currentRule : currentSubscription.rules()) {
+            if (ruleId.equals(currentRule.id())) {
+                updatedRules.add(new NotificationRuleDefinition(
+                        ruleId,
+                        currentRule.type(),
+                        request.enabled(),
+                        currentRule.parameters(),
+                        currentRule.createdAt(),
+                        currentRule.updatedAt()
+                ));
+                ruleWasFound = true;
+            } else {
+                updatedRules.add(currentRule);
+            }
+        }
+
+        if (!ruleWasFound) {
+            throw new NotificationRuleNotFoundException();
+        }
+
+        return saveWithRules(currentSubscription, updatedRules);
+    }
+
+    public ServerSubscription addChannel(
+            UUID userId,
+            UUID subscriptionId,
+            NotificationChannelRequest request
+    ) {
+        return addChannel(
+                userId,
+                subscriptionId,
+                new CreateChannelRequest(
+                        request.type(),
+                        request.enabled(),
+                        request.parameters()
+                )
+        );
+    }
+
+    public ServerSubscription addChannel(
+            UUID userId,
+            UUID subscriptionId,
+            CreateChannelRequest request
+    ) {
+        return addChannelWithId(
+                userId,
+                subscriptionId,
+                UUID.randomUUID(),
+                request
+        );
+    }
+
+    public NotificationChannelConfiguration createChannel(
+            UUID userId,
+            UUID subscriptionId,
+            CreateChannelRequest request
+    ) {
+        UUID channelId = UUID.randomUUID();
+        addChannelWithId(userId, subscriptionId, channelId, request);
+        return getChannel(userId, subscriptionId, channelId);
+    }
+
+    private ServerSubscription addChannelWithId(
+            UUID userId,
+            UUID subscriptionId,
+            UUID channelId,
+            CreateChannelRequest request
+    ) {
+        ServerSubscription currentSubscription = get(userId, subscriptionId);
+        String normalizedType = channelValidatorRegistry.normalizeType(request.type());
+        channelValidatorRegistry.validate(normalizedType, request.parameters());
+
+        boolean typeAlreadyExists = currentSubscription.channels().stream()
+                .anyMatch(channel -> channel.type().equalsIgnoreCase(normalizedType));
+        if (typeAlreadyExists) {
+            throw new ChannelAlreadyExistsException();
+        }
+
+        List<NotificationChannelConfiguration> updatedChannels = new ArrayList<>(currentSubscription.channels());
+        updatedChannels.add(createChannelConfiguration(
+                channelId,
+                request.type(),
+                request.enabled(),
+                request.parameters()
+        ));
+
+        return saveWithChannels(currentSubscription, updatedChannels);
+    }
+
+    public ServerSubscription updateChannel(
+            UUID userId,
+            UUID subscriptionId,
+            UUID channelId,
+            NotificationChannelRequest request
+    ) {
+        return updateChannel(
+                userId,
+                subscriptionId,
+                channelId,
+                new UpdateChannelRequest(
+                        request.type(),
+                        request.enabled(),
+                        request.parameters()
+                )
+        );
+    }
+
+    public ServerSubscription updateChannel(
+            UUID userId,
+            UUID subscriptionId,
+            UUID channelId,
+            UpdateChannelRequest request
+    ) {
+        ServerSubscription currentSubscription = get(userId, subscriptionId);
+        String normalizedType = channelValidatorRegistry.normalizeType(request.type());
+        NotificationChannelConfiguration channelToUpdate = currentSubscription.channels().stream()
+                .filter(channel -> channelId.equals(channel.id()))
+                .findFirst()
+                .orElseThrow(NotificationChannelNotFoundException::new);
+        channelValidatorRegistry.validate(normalizedType, request.parameters());
+
+        boolean anotherChannelUsesType = currentSubscription.channels().stream()
+                .anyMatch(channel -> !channel.id().equals(channelToUpdate.id())
+                        && channel.type().equalsIgnoreCase(normalizedType));
+        if (anotherChannelUsesType) {
+            throw new ChannelAlreadyExistsException();
+        }
+
+        List<NotificationChannelConfiguration> updatedChannels = new ArrayList<>();
+
+        for (NotificationChannelConfiguration currentChannel : currentSubscription.channels()) {
+            if (channelId.equals(currentChannel.id())) {
+                updatedChannels.add(createChannelConfiguration(
+                        channelId,
+                        normalizedType,
+                        request.enabled(),
+                        request.parameters()
+                ));
+            } else {
+                updatedChannels.add(currentChannel);
+            }
+        }
+
+        return saveWithChannels(currentSubscription, updatedChannels);
+    }
+
+    public ServerSubscription patchChannel(
+            UUID userId,
+            UUID subscriptionId,
+            UUID channelId,
+            PatchChannelRequest request
+    ) {
+        if (request.enabled() == null) {
+            throw new InvalidRequestException(
+                    "O campo enabled deve ser informado"
+            );
+        }
+
+        ServerSubscription currentSubscription = get(userId, subscriptionId);
+        List<NotificationChannelConfiguration> updatedChannels = new ArrayList<>();
+        boolean channelWasFound = false;
+
+        for (NotificationChannelConfiguration currentChannel : currentSubscription.channels()) {
+            if (channelId.equals(currentChannel.id())) {
+                updatedChannels.add(new NotificationChannelConfiguration(
+                        channelId,
+                        currentChannel.type(),
+                        request.enabled(),
+                        currentChannel.parameters(),
+                        currentChannel.createdAt(),
+                        currentChannel.updatedAt()
+                ));
+                channelWasFound = true;
+            } else {
+                updatedChannels.add(currentChannel);
+            }
+        }
+
+        if (!channelWasFound) {
+            throw new NotificationChannelNotFoundException();
+        }
+
+        return saveWithChannels(currentSubscription, updatedChannels);
+    }
+
+    public ServerSubscription deleteChannel(
+            UUID userId,
+            UUID subscriptionId,
+            UUID channelId
+    ) {
+        ServerSubscription currentSubscription = get(userId, subscriptionId);
+        List<NotificationChannelConfiguration> remainingChannels = new ArrayList<>();
+        boolean channelWasFound = false;
+
+        for (NotificationChannelConfiguration currentChannel : currentSubscription.channels()) {
+            if (channelId.equals(currentChannel.id())) {
+                channelWasFound = true;
+            } else {
+                remainingChannels.add(currentChannel);
+            }
+        }
+
+        if (!channelWasFound) {
+            throw new NotificationChannelNotFoundException();
+        }
+
+        return saveWithChannels(currentSubscription, remainingChannels);
     }
 
     public ServerSubscription deleteRule(UUID userId, UUID subscriptionId, UUID ruleId) {
@@ -156,6 +530,39 @@ public class SubscriptionApplicationService {
         return saveWithRules(currentSubscription, remainingRules);
     }
 
+    public List<NotificationRuleDefinition> listRules(UUID userId, UUID subscriptionId) {
+        return get(userId, subscriptionId).rules();
+    }
+
+    public NotificationRuleDefinition getRule(
+            UUID userId,
+            UUID subscriptionId,
+            UUID ruleId
+    ) {
+        return get(userId, subscriptionId).rules().stream()
+                .filter(rule -> ruleId.equals(rule.id()))
+                .findFirst()
+                .orElseThrow(NotificationRuleNotFoundException::new);
+    }
+
+    public List<NotificationChannelConfiguration> listChannels(
+            UUID userId,
+            UUID subscriptionId
+    ) {
+        return get(userId, subscriptionId).channels();
+    }
+
+    public NotificationChannelConfiguration getChannel(
+            UUID userId,
+            UUID subscriptionId,
+            UUID channelId
+    ) {
+        return get(userId, subscriptionId).channels().stream()
+                .filter(channel -> channelId.equals(channel.id()))
+                .findFirst()
+                .orElseThrow(NotificationChannelNotFoundException::new);
+    }
+
     private User findEnabledUser(UUID userId) {
         return userRepository
                 .findById(userId)
@@ -167,22 +574,18 @@ public class SubscriptionApplicationService {
     private ServerSubscription createSubscription(
             User user,
             Server server,
-            SubscriptionCreationRequest request
+            CreateSubscriptionRequest request
     ) {
         Instant currentTime = Instant.now(clock);
-        List<NotificationRuleDefinition> rules = createRuleDefinitions(request.rules());
-        List<NotificationChannelConfiguration> channels = createChannelConfigurations(
-                request.channels()
-        );
 
         return new ServerSubscription(
                 UUID.randomUUID(),
                 user.id(),
                 server,
                 request.serverGuid(),
-                true,
-                rules,
-                channels,
+                request.enabled(),
+                List.of(),
+                List.of(),
                 currentTime,
                 currentTime
         );
@@ -204,7 +607,7 @@ public class SubscriptionApplicationService {
             UUID ruleId,
             NotificationRuleRequest request
     ) {
-        return new NotificationRuleDefinition(
+        return createRuleDefinition(
                 ruleId,
                 request.type(),
                 request.enabled(),
@@ -212,22 +615,92 @@ public class SubscriptionApplicationService {
         );
     }
 
+    private NotificationRuleDefinition createRuleDefinition(
+            UUID ruleId,
+            String type,
+            boolean enabled,
+            Map<String, Object> parameters
+    ) {
+        return createRuleDefinition(
+                ruleId,
+                type,
+                enabled,
+                parameters,
+                null,
+                null
+        );
+    }
+
+    private NotificationRuleDefinition createRuleDefinition(
+            UUID ruleId,
+            String type,
+            boolean enabled,
+            Map<String, Object> parameters,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        String normalizedType = ruleValidatorRegistry.normalizeType(type);
+        ruleValidatorRegistry.validate(normalizedType, parameters);
+
+        return new NotificationRuleDefinition(
+                ruleId,
+                normalizedType,
+                enabled,
+                parameters,
+                createdAt,
+                updatedAt
+        );
+    }
+
     private List<NotificationChannelConfiguration> createChannelConfigurations(
             List<NotificationChannelRequest> requests
     ) {
-        return requests.stream()
-                .map(this::createChannelConfiguration)
-                .toList();
+        Set<String> channelTypes = new HashSet<>();
+        List<NotificationChannelConfiguration> configurations = new ArrayList<>();
+
+        for (NotificationChannelRequest request : requests) {
+            NotificationChannelConfiguration configuration = createChannelConfiguration(request);
+            if (!channelTypes.add(configuration.type())) {
+                throw new ChannelAlreadyExistsException();
+            }
+            configurations.add(configuration);
+        }
+
+        return List.copyOf(configurations);
     }
 
     private NotificationChannelConfiguration createChannelConfiguration(
             NotificationChannelRequest request
     ) {
-        return new NotificationChannelConfiguration(
-                UUID.randomUUID(),
+        return createChannelConfiguration(UUID.randomUUID(), request);
+    }
+
+    private NotificationChannelConfiguration createChannelConfiguration(
+            UUID channelId,
+            NotificationChannelRequest request
+    ) {
+        return createChannelConfiguration(
+                channelId,
                 request.type(),
                 request.enabled(),
                 request.parameters()
+        );
+    }
+
+    private NotificationChannelConfiguration createChannelConfiguration(
+            UUID channelId,
+            String type,
+            boolean enabled,
+            Map<String, Object> parameters
+    ) {
+        String normalizedType = channelValidatorRegistry.normalizeType(type);
+        channelValidatorRegistry.validate(normalizedType, parameters);
+
+        return new NotificationChannelConfiguration(
+                channelId,
+                normalizedType,
+                enabled,
+                parameters
         );
     }
 
@@ -247,7 +720,26 @@ public class SubscriptionApplicationService {
                 Instant.now(clock)
         );
 
-        return subscriptionPersistenceService.save(updatedSubscription);
+        return subscriptionPersistenceService.saveRules(updatedSubscription, rules);
+    }
+
+    private ServerSubscription saveWithChannels(
+            ServerSubscription currentSubscription,
+            List<NotificationChannelConfiguration> channels
+    ) {
+        ServerSubscription updatedSubscription = new ServerSubscription(
+                currentSubscription.id(),
+                currentSubscription.userId(),
+                currentSubscription.server(),
+                currentSubscription.externalGuid(),
+                currentSubscription.enabled(),
+                currentSubscription.rules(),
+                channels,
+                currentSubscription.createdAt(),
+                Instant.now(clock)
+        );
+
+        return subscriptionPersistenceService.saveChannels(updatedSubscription, channels);
     }
 
     private Server resolveServer(String guid, String displayName) {
@@ -286,13 +778,4 @@ public class SubscriptionApplicationService {
                 .orElseThrow(() -> concurrentCreationException);
     }
 
-    private ServerSubscription findSubscriptionCreatedConcurrently(
-            UUID userId,
-            UUID serverId,
-            DataIntegrityViolationException concurrentCreationException
-    ) {
-        return subscriptionPersistenceService
-                .findByUserIdAndServerId(userId, serverId)
-                .orElseThrow(() -> concurrentCreationException);
-    }
 }

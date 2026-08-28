@@ -119,16 +119,16 @@ public class NotificationOrchestrator {
                 results.add(result);
                 if (result.success()) {
                     log.info(
-                            "Notificação enviada | channel={} | serverId={} | sentAt={}",
+                            "Notificação enviada | channel={} | subscriptionId={} | sentAt={}",
                             result.channelType(),
                             server.id(),
                             result.sentAt()
                     );
                 } else {
-                    log.warn("Falha no canal {} para serverId={}: {}", result.channelType(), server.id(), result.errorMessage());
+                    log.warn("Falha no canal {} para subscriptionId={}: {}", result.channelType(), server.id(), result.errorMessage());
                 }
             } catch (RuntimeException exception) {
-                log.error("Erro no canal {} para serverId={}", configuration.type(), server.id(), exception);
+                log.error("Erro no canal {} para subscriptionId={}", configuration.type(), server.id(), exception);
                 NotificationResult failure = NotificationResult.failure(configuration.type(), exception.getMessage());
                 results.add(failure);
             }
@@ -139,7 +139,7 @@ public class NotificationOrchestrator {
     private void logDecision(MonitoredServer server, ServerSnapshot snapshot, NotificationDecision decision) {
         for (RuleEvaluationResult result : decision.results()) {
             log.info(
-                    "RULE EVALUATION | serverId={} | rule={} | matched={} | reason={} | metadata={}",
+                    "RULE EVALUATION | subscriptionId={} | rule={} | matched={} | reason={} | metadata={}",
                     server.id(), result.ruleType(), result.matched(), result.reason(), result.metadata()
             );
         }
@@ -151,7 +151,7 @@ public class NotificationOrchestrator {
         log.info(
                 "NOTIFICATION DECISION | server='{}' | serverId={} | approved={}",
                 serverDisplayName,
-                server.id(),
+                server.serverId(),
                 decision.approved()
         );
     }

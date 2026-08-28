@@ -12,7 +12,8 @@ class Bf4ApiPrefixTest {
     void shouldUseApiBf4PrefixForEveryPublicBf4Controller() {
         List<Class<?>> controllers = List.of(
                 ServerSearchController.class,
-                SubscriptionController.class
+                SubscriptionController.class,
+                BattlefieldMapController.class
         );
 
         for (Class<?> controller : controllers) {

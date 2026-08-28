@@ -9,6 +9,7 @@ import com.yurepires.lazydeploy.service.notification.NotificationOrchestrator;
 import com.yurepires.lazydeploy.service.subscription.ServerSubscriptionPersistenceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,7 @@ public class ServerMonitor {
     private final ServerSubscriptionPersistenceService subscriptionPersistenceService;
     private final MonitoringStateService monitoringStateService;
     private final NotificationOrchestrator notificationOrchestrator;
+    private final ServerSnapshotEnricher snapshotEnricher;
 
     public ServerMonitor(
             ServerSnapshotProvider snapshotProvider,
@@ -35,10 +37,28 @@ public class ServerMonitor {
             MonitoringStateService monitoringStateService,
             NotificationOrchestrator notificationOrchestrator
     ) {
+        this(
+                snapshotProvider,
+                subscriptionPersistenceService,
+                monitoringStateService,
+                notificationOrchestrator,
+                new ServerSnapshotEnricher()
+        );
+    }
+
+    @Autowired
+    public ServerMonitor(
+            ServerSnapshotProvider snapshotProvider,
+            ServerSubscriptionPersistenceService subscriptionPersistenceService,
+            MonitoringStateService monitoringStateService,
+            NotificationOrchestrator notificationOrchestrator,
+            ServerSnapshotEnricher snapshotEnricher
+    ) {
         this.snapshotProvider = snapshotProvider;
         this.subscriptionPersistenceService = subscriptionPersistenceService;
         this.monitoringStateService = monitoringStateService;
         this.notificationOrchestrator = notificationOrchestrator;
+        this.snapshotEnricher = snapshotEnricher;
     }
 
     @Scheduled(fixedDelayString = "${lazydeploy.monitoring.interval}")
@@ -84,7 +104,8 @@ public class ServerMonitor {
             return;
         }
 
-        processSnapshot(server, serverSubscriptions, snapshot.get());
+        ServerSnapshot enrichedSnapshot = snapshotEnricher.enrich(snapshot.get());
+        processSnapshot(server, serverSubscriptions, enrichedSnapshot);
     }
 
     private ServerReference createServerReference(Server server, String serverGuid) {

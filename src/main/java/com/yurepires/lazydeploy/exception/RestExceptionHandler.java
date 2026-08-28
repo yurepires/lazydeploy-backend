@@ -42,6 +42,20 @@ public class RestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(MapNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleMapNotFound(
+            MapNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return response(
+                HttpStatus.NOT_FOUND,
+                "Map not found",
+                exception.getMessage(),
+                exception.getErrorCode(),
+                request
+        );
+    }
+
     @ExceptionHandler(SubscriptionAlreadyExistsException.class)
     public ResponseEntity<ProblemDetail> handleSubscriptionConflict(
             SubscriptionAlreadyExistsException exception,
@@ -90,7 +104,8 @@ public class RestExceptionHandler {
             UnsupportedRuleTypeException.class,
             InvalidRuleParametersException.class,
             UnsupportedChannelTypeException.class,
-            InvalidChannelConfigurationException.class
+            InvalidChannelConfigurationException.class,
+            UnknownMapException.class
     })
     public ResponseEntity<ProblemDetail> handleUnprocessableEntity(
             Exception exception,

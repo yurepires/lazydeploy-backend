@@ -45,6 +45,8 @@ repita o valor no header `X-XSRF-TOKEN`.
 ## API BF4
 
 - `GET /api/bf4/servers/search?query=<nome>&limit=20`
+- `GET /api/bf4/maps`
+- `GET /api/bf4/maps/{mapId}`
 - `POST /api/bf4/subscriptions`
 - `GET /api/bf4/subscriptions`
 - `GET /api/bf4/subscriptions/{id}`
@@ -59,6 +61,12 @@ As respostas de erro seguem o formato RFC 9457 (`ProblemDetail`), com os campos
 `errorCode`, `timestamp` e, quando aplicável, `fieldErrors`. Os tipos de regra
 disponíveis são `MAP_IN` e `PLAYER_COUNT_AT_LEAST`; o canal disponível nesta fase
 é `EMAIL`, configurado somente com o parâmetro `recipient`.
+
+O catálogo de mapas retorna somente mapas habilitados e ordenados pelo nome
+amigável. As regras `MAP_IN` continuam armazenando o identificador técnico (por
+exemplo, `MP_Prison`); o catálogo é usado para validação e apresentação. Se o
+Keeper enviar um mapa ainda não catalogado, o monitoramento continua e usa o
+próprio identificador técnico como nome de exibição.
 
 Todos os endpoints em `/api/bf4/**`, exceto cadastro, login e obtenção do token
 CSRF, exigem autenticação. O logout exige uma sessão autenticada.

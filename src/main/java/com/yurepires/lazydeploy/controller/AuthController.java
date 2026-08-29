@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/bf4/auth")
+@RequestMapping("/api/auth")
 public class AuthController {
 
     private final RegisterUserService registerUserService;

@@ -1,6 +1,7 @@
 package com.yurepires.lazydeploy.service.subscription;
 
 import com.yurepires.lazydeploy.entity.NotificationChannelConfigurationEntity;
+import com.yurepires.lazydeploy.entity.NotificationDeliveryAttemptEntity;
 import com.yurepires.lazydeploy.entity.NotificationRuleEntity;
 import com.yurepires.lazydeploy.entity.ServerEntity;
 import com.yurepires.lazydeploy.entity.ServerIdentifierEntity;
@@ -17,12 +18,14 @@ import com.yurepires.lazydeploy.model.persistence.ServerSubscription;
 import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.repository.NotificationChannelConfigurationRepository;
 import com.yurepires.lazydeploy.repository.NotificationChannelParameterRepository;
+import com.yurepires.lazydeploy.repository.NotificationDeliveryAttemptRepository;
 import com.yurepires.lazydeploy.repository.NotificationRuleParameterRepository;
 import com.yurepires.lazydeploy.repository.NotificationRuleRepository;
 import com.yurepires.lazydeploy.repository.NotificationStateRepository;
 import com.yurepires.lazydeploy.repository.ServerIdentifierRepository;
 import com.yurepires.lazydeploy.repository.ServerRepository;
 import com.yurepires.lazydeploy.repository.ServerSubscriptionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +48,7 @@ public class ServerSubscriptionPersistenceService {
     private final NotificationChannelConfigurationRepository channelRepository;
     private final NotificationChannelParameterRepository channelParameterRepository;
     private final NotificationStateRepository notificationStateRepository;
+    private final NotificationDeliveryAttemptRepository deliveryAttemptRepository;
     private final ServerSubscriptionMapper subscriptionMapper;
     private final ServerMapper serverMapper;
     private final ParameterValueMapper parameterValueMapper;
@@ -62,6 +66,37 @@ public class ServerSubscriptionPersistenceService {
             ServerMapper serverMapper,
             ParameterValueMapper parameterValueMapper
     ) {
+        this(
+                subscriptionRepository,
+                serverRepository,
+                identifierRepository,
+                ruleRepository,
+                ruleParameterRepository,
+                channelRepository,
+                channelParameterRepository,
+                notificationStateRepository,
+                null,
+                subscriptionMapper,
+                serverMapper,
+                parameterValueMapper
+        );
+    }
+
+    @Autowired
+    public ServerSubscriptionPersistenceService(
+            ServerSubscriptionRepository subscriptionRepository,
+            ServerRepository serverRepository,
+            ServerIdentifierRepository identifierRepository,
+            NotificationRuleRepository ruleRepository,
+            NotificationRuleParameterRepository ruleParameterRepository,
+            NotificationChannelConfigurationRepository channelRepository,
+            NotificationChannelParameterRepository channelParameterRepository,
+            NotificationStateRepository notificationStateRepository,
+            NotificationDeliveryAttemptRepository deliveryAttemptRepository,
+            ServerSubscriptionMapper subscriptionMapper,
+            ServerMapper serverMapper,
+            ParameterValueMapper parameterValueMapper
+    ) {
         this.subscriptionRepository = subscriptionRepository;
         this.serverRepository = serverRepository;
         this.identifierRepository = identifierRepository;
@@ -70,6 +105,7 @@ public class ServerSubscriptionPersistenceService {
         this.channelRepository = channelRepository;
         this.channelParameterRepository = channelParameterRepository;
         this.notificationStateRepository = notificationStateRepository;
+        this.deliveryAttemptRepository = deliveryAttemptRepository;
         this.subscriptionMapper = subscriptionMapper;
         this.serverMapper = serverMapper;
         this.parameterValueMapper = parameterValueMapper;
@@ -160,8 +196,47 @@ public class ServerSubscriptionPersistenceService {
 
         deleteExistingRules(subscriptionId);
         deleteExistingChannels(subscriptionId);
+        preserveDeliveryAttemptOwnership(subscriptionId, userId);
         notificationStateRepository.deleteAllBySubscriptionId(subscriptionId);
         subscriptionRepository.delete(subscription.get());
+    }
+
+    private void preserveDeliveryAttemptOwnership(UUID subscriptionId, UUID userId) {
+        if (deliveryAttemptRepository == null) {
+            return;
+        }
+
+        List<NotificationDeliveryAttemptEntity> attempts = deliveryAttemptRepository
+                .findAllBySubscriptionId(subscriptionId);
+        if (attempts.isEmpty()) {
+            return;
+        }
+
+        List<NotificationDeliveryAttemptEntity> ownedAttempts = attempts.stream()
+                .map(attempt -> new NotificationDeliveryAttemptEntity(
+                        attempt.getId(),
+                        attempt.getSubscriptionId(),
+                        userId,
+                        attempt.getRoundInstanceId(),
+                        attempt.getServerId(),
+                        attempt.getServerDisplayName(),
+                        attempt.getMapId(),
+                        attempt.getMapDisplayName(),
+                        attempt.getPlayerCount(),
+                        attempt.getMaxPlayers(),
+                        attempt.getGameMode(),
+                        attempt.getRecipientSnapshot(),
+                        attempt.getChannelType(),
+                        attempt.getStatus(),
+                        attempt.getAttemptedAt(),
+                        attempt.getSentAt(),
+                        attempt.getErrorCode(),
+                        attempt.getErrorMessage(),
+                        attempt.getMetadata()
+                ))
+                .toList();
+
+        deliveryAttemptRepository.saveAll(ownedAttempts);
     }
 
     private void replaceRules(

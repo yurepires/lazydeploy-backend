@@ -195,7 +195,7 @@ class PersistenceIntegrationTest {
                 new NotificationChannelRequest(
                         "EMAIL",
                         true,
-                        Map.of("recipient", "notify@example.test")
+                        Map.of()
                 )
         );
 

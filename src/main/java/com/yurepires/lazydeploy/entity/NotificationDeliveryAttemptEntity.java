@@ -14,11 +14,42 @@ public class NotificationDeliveryAttemptEntity {
     @Id
     private UUID id;
 
-    @Column(name="subscription_id", nullable=false)
+    @Column(name="subscription_id")
     private UUID subscriptionId;
+
+    /**
+     * Keeps ownership available when the subscription is later removed.
+     * This is intentionally not exposed by the history API.
+     */
+    @Column(name="owner_user_id")
+    private UUID ownerUserId;
 
     @Column(name="round_instance_id", nullable=false)
     private UUID roundInstanceId;
+
+    @Column(name="server_id")
+    private UUID serverId;
+
+    @Column(name="server_display_name", length=255)
+    private String serverDisplayName;
+
+    @Column(name="map_id", length=255)
+    private String mapId;
+
+    @Column(name="map_display_name", length=255)
+    private String mapDisplayName;
+
+    @Column(name="player_count")
+    private Integer playerCount;
+
+    @Column(name="max_players")
+    private Integer maxPlayers;
+
+    @Column(name="game_mode", length=128)
+    private String gameMode;
+
+    @Column(name="recipient_snapshot", length=320)
+    private String recipientSnapshot;
 
     @Column(name="channel_type", nullable=false, length=64)
     private String channelType;
@@ -57,9 +88,105 @@ public class NotificationDeliveryAttemptEntity {
             String errorMessage,
             Map<String, Object> metadata
     ) {
+        this(
+                id,
+                subscriptionId,
+                null,
+                roundInstanceId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                channelType,
+                status,
+                attemptedAt,
+                sentAt,
+                errorCode,
+                errorMessage,
+                metadata
+        );
+    }
+
+    public NotificationDeliveryAttemptEntity(
+            UUID id,
+            UUID subscriptionId,
+            UUID ownerUserId,
+            UUID roundInstanceId,
+            UUID serverId,
+            String serverDisplayName,
+            String mapId,
+            String mapDisplayName,
+            Integer playerCount,
+            Integer maxPlayers,
+            String gameMode,
+            String channelType,
+            String status,
+            Instant attemptedAt,
+            Instant sentAt,
+            String errorCode,
+            String errorMessage,
+            Map<String, Object> metadata
+    ) {
+        this(
+                id,
+                subscriptionId,
+                ownerUserId,
+                roundInstanceId,
+                serverId,
+                serverDisplayName,
+                mapId,
+                mapDisplayName,
+                playerCount,
+                maxPlayers,
+                gameMode,
+                null,
+                channelType,
+                status,
+                attemptedAt,
+                sentAt,
+                errorCode,
+                errorMessage,
+                metadata
+        );
+    }
+
+    public NotificationDeliveryAttemptEntity(
+            UUID id,
+            UUID subscriptionId,
+            UUID ownerUserId,
+            UUID roundInstanceId,
+            UUID serverId,
+            String serverDisplayName,
+            String mapId,
+            String mapDisplayName,
+            Integer playerCount,
+            Integer maxPlayers,
+            String gameMode,
+            String recipientSnapshot,
+            String channelType,
+            String status,
+            Instant attemptedAt,
+            Instant sentAt,
+            String errorCode,
+            String errorMessage,
+            Map<String, Object> metadata
+    ) {
         this.id=id;
         this.subscriptionId=subscriptionId;
+        this.ownerUserId=ownerUserId;
         this.roundInstanceId=roundInstanceId;
+        this.serverId=serverId;
+        this.serverDisplayName=serverDisplayName;
+        this.mapId=mapId;
+        this.mapDisplayName=mapDisplayName;
+        this.playerCount=playerCount;
+        this.maxPlayers=maxPlayers;
+        this.gameMode=gameMode;
+        this.recipientSnapshot=recipientSnapshot;
         this.channelType=channelType;
         this.status=status;
         this.attemptedAt=attemptedAt;
@@ -77,8 +204,44 @@ public class NotificationDeliveryAttemptEntity {
         return subscriptionId;
     }
 
+    public UUID getOwnerUserId() {
+        return ownerUserId;
+    }
+
     public UUID getRoundInstanceId(){
         return roundInstanceId;
+    }
+
+    public UUID getServerId() {
+        return serverId;
+    }
+
+    public String getServerDisplayName() {
+        return serverDisplayName;
+    }
+
+    public String getMapId() {
+        return mapId;
+    }
+
+    public String getMapDisplayName() {
+        return mapDisplayName;
+    }
+
+    public Integer getPlayerCount() {
+        return playerCount;
+    }
+
+    public Integer getMaxPlayers() {
+        return maxPlayers;
+    }
+
+    public String getGameMode() {
+        return gameMode;
+    }
+
+    public String getRecipientSnapshot() {
+        return recipientSnapshot;
     }
 
     public String getChannelType(){

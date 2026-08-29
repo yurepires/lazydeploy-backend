@@ -21,7 +21,7 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
 
     public static final String PROVIDER_ID = "GAMETOOLS";
     private static final Logger log = LoggerFactory.getLogger(GameToolsServerDiscoveryProvider.class);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final WebClient webClient;
 

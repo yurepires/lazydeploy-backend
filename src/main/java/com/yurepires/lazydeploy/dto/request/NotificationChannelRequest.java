@@ -1,5 +1,6 @@
 package com.yurepires.lazydeploy.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 
 import java.util.Collections;
@@ -9,8 +10,17 @@ import java.util.Map;
 public record NotificationChannelRequest(
         @NotBlank String type,
         boolean enabled,
-        Map<String, Object> parameters
+        Map<String, Object> parameters,
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String recipient
 ) {
+    public NotificationChannelRequest(
+            String type,
+            boolean enabled,
+            Map<String, Object> parameters
+    ) {
+        this(type, enabled, parameters, null);
+    }
+
     public NotificationChannelRequest {
         if (parameters == null) {
             parameters = Map.of();

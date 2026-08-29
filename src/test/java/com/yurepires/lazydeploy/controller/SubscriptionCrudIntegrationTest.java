@@ -174,11 +174,12 @@ class SubscriptionCrudIntegrationTest {
                         .content("""
                                 {
                                   "type": "EMAIL",
-                                  "parameters": {"recipient": "first@example.com"}
+                                  "enabled": true
                                 }
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.type").value("EMAIL"))
+                .andExpect(jsonPath("$.parameters").doesNotExist())
                 .andReturn();
         String channelId = objectMapper.readTree(
                 creationResult.getResponse().getContentAsString()
@@ -188,7 +189,7 @@ class SubscriptionCrudIntegrationTest {
                         .with(csrf())
                         .session(session)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"type\":\"EMAIL\",\"parameters\":{\"recipient\":\"second@example.com\"}}"))
+                        .content("{\"type\":\"EMAIL\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("CHANNEL_ALREADY_EXISTS"));
 
@@ -196,7 +197,15 @@ class SubscriptionCrudIntegrationTest {
                         .with(csrf())
                         .session(session)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"type\":\"EMAIL\",\"parameters\":{\"recipient\":\"invalid\"}}"))
+                        .content("{\"type\":\"EMAIL\",\"parameters\":{\"recipient\":\"third-party@example.com\"}}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_CHANNEL_CONFIGURATION"));
+
+        mockMvc.perform(post("/api/bf4/subscriptions/" + subscriptionId + "/channels")
+                        .with(csrf())
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"EMAIL\",\"recipient\":\"third-party@example.com\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_CHANNEL_CONFIGURATION"));
 
@@ -212,9 +221,9 @@ class SubscriptionCrudIntegrationTest {
                         .with(csrf())
                         .session(session)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"type\":\"EMAIL\",\"parameters\":{\"recipient\":\"updated@example.com\"}}"))
+                        .content("{\"type\":\"EMAIL\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.parameters.recipient").value("updated@example.com"));
+                .andExpect(jsonPath("$.parameters").doesNotExist());
 
         mockMvc.perform(delete("/api/bf4/subscriptions/" + subscriptionId + "/channels/" + channelId)
                         .with(csrf())
@@ -289,7 +298,7 @@ class SubscriptionCrudIntegrationTest {
                         .with(csrf())
                         .session(session)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"type\":\"EMAIL\",\"parameters\":{\"recipient\":\"owner@example.com\"}}"))
+                .content("{\"type\":\"EMAIL\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -299,13 +308,13 @@ class SubscriptionCrudIntegrationTest {
     }
 
     private MockHttpSession login(String email) throws Exception {
-        mockMvc.perform(post("/api/bf4/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"password-123\"}"))
                 .andExpect(status().isCreated());
 
-        MvcResult result = mockMvc.perform(post("/api/bf4/auth/login")
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"password-123\"}"))

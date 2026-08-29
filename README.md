@@ -24,11 +24,11 @@ O volume `lazydeploy_postgres_data` mantém os dados após reinícios do contain
 
 ## Autenticação
 
-- `POST /api/bf4/auth/register`
-- `POST /api/bf4/auth/login`
-- `POST /api/bf4/auth/logout`
-- `GET /api/bf4/auth/me`
-- `GET /api/bf4/auth/csrf`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/auth/csrf`
 
 O cadastro e o login utilizam email e senha. A aplicação normaliza o email,
 armazena somente o hash da senha e mantém a identidade autenticada em uma sessão
@@ -39,7 +39,7 @@ Em produção, defina `SESSION_COOKIE_SECURE=true` quando a aplicação estiver
 atrás de HTTPS.
 
 Como a autenticação utiliza cookies, operações mutáveis exigem token CSRF. Para
-testes manuais, faça primeiro `GET /api/bf4/auth/csrf`, envie o cookie recebido e
+testes manuais, faça primeiro `GET /api/auth/csrf`, envie o cookie recebido e
 repita o valor no header `X-XSRF-TOKEN`.
 
 ## API BF4
@@ -47,6 +47,9 @@ repita o valor no header `X-XSRF-TOKEN`.
 - `GET /api/bf4/servers/search?query=<nome>&limit=20`
 - `GET /api/bf4/maps`
 - `GET /api/bf4/maps/{mapId}`
+- `GET /api/bf4/notifications`
+- `GET /api/bf4/notifications/{notificationId}`
+- `GET /api/bf4/subscriptions/{id}/notifications`
 - `POST /api/bf4/subscriptions`
 - `GET /api/bf4/subscriptions`
 - `GET /api/bf4/subscriptions/{id}`
@@ -60,7 +63,10 @@ repita o valor no header `X-XSRF-TOKEN`.
 As respostas de erro seguem o formato RFC 9457 (`ProblemDetail`), com os campos
 `errorCode`, `timestamp` e, quando aplicável, `fieldErrors`. Os tipos de regra
 disponíveis são `MAP_IN` e `PLAYER_COUNT_AT_LEAST`; o canal disponível nesta fase
-é `EMAIL`, configurado somente com o parâmetro `recipient`.
+é `EMAIL`, sem parâmetros, cujo destino é sempre o endereço de email da conta
+proprietária.
+Ao criar ou atualizar esse canal, envie apenas `type` e `enabled`; qualquer
+parâmetro, incluindo `recipient`, é rejeitado.
 
 O catálogo de mapas retorna somente mapas habilitados e ordenados pelo nome
 amigável. As regras `MAP_IN` continuam armazenando o identificador técnico (por
@@ -68,8 +74,21 @@ exemplo, `MP_Prison`); o catálogo é usado para validação e apresentação. S
 Keeper enviar um mapa ainda não catalogado, o monitoramento continua e usa o
 próprio identificador técnico como nome de exibição.
 
-Todos os endpoints em `/api/bf4/**`, exceto cadastro, login e obtenção do token
-CSRF, exigem autenticação. O logout exige uma sessão autenticada.
+O histórico de notificações é somente leitura e sempre pertence ao usuário da
+sessão atual. Os endpoints aceitam `page` (inicia em 0), `size` (padrão 20,
+máximo 100), `status`, `channel`, `mapId`, `serverId`, `subscriptionId`, `from`
+e `to`. A ordenação padrão é `attemptedAt` decrescente; também são aceitos
+`sentAt`, `status` e `channelType`. O histórico mantém um snapshot do servidor,
+mapa e jogadores no momento da tentativa, inclusive quando a entrega falha.
+Os limites `from` e `to` são inclusivos.
+Quando uma inscrição é removida, as tentativas permanecem preservadas; a
+referência da inscrição pode ficar nula, mas o histórico continua vinculado ao
+usuário que originou a tentativa.
+
+Os endpoints `POST /api/auth/register`, `POST /api/auth/login` e
+`GET /api/auth/csrf` são públicos. `POST /api/auth/logout` e `GET /api/auth/me`
+exigem uma sessão autenticada. Todos os demais endpoints em `/api/bf4/**`
+continuam exigindo autenticação.
 
 ## Estrutura do código
 
@@ -84,7 +103,3 @@ CSRF, exigem autenticação. O logout exige uma sessão autenticada.
 - `model`: objetos imutáveis e contratos do domínio.
 - `repository`: interfaces Spring Data que estendem `JpaRepository`.
 - `service`: regras de aplicação, monitoramento e notificações.
-
-O acesso ao banco segue o fluxo `service -> repository -> entity`. Não existe uma
-camada adicional de adapters. Quando o service precisa trabalhar com um modelo de
-domínio, a conversão entre esse modelo e a entidade é feita por um mapper dedicado.

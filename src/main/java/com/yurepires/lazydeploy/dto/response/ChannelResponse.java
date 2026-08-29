@@ -10,17 +10,18 @@ public record ChannelResponse(
         UUID id,
         String type,
         boolean enabled,
-        Map<String, Object> parameters,
         Instant createdAt,
         Instant updatedAt
 ) {
-
-    public ChannelResponse {
-        if (parameters == null) {
-            parameters = Map.of();
-        } else {
-            parameters = Map.copyOf(parameters);
-        }
+    public ChannelResponse(
+            UUID id,
+            String type,
+            boolean enabled,
+            Map<String, Object> ignoredParameters,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        this(id, type, enabled, createdAt, updatedAt);
     }
 
     public static ChannelResponse from(NotificationChannelConfiguration channel) {
@@ -28,7 +29,6 @@ public record ChannelResponse(
                 channel.id(),
                 channel.type(),
                 channel.enabled(),
-                channel.parameters(),
                 channel.createdAt(),
                 channel.updatedAt()
         );

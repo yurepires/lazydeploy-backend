@@ -5,6 +5,10 @@ import com.yurepires.lazydeploy.mapper.NotificationDeliveryAttemptMapper;
 import com.yurepires.lazydeploy.model.monitoring.NotificationState;
 import com.yurepires.lazydeploy.model.notification.NotificationResult;
 import com.yurepires.lazydeploy.model.persistence.NotificationDeliveryAttempt;
+import com.yurepires.lazydeploy.model.server.MapSnapshot;
+import com.yurepires.lazydeploy.model.server.MonitoredServer;
+import com.yurepires.lazydeploy.model.server.PlayerSnapshot;
+import com.yurepires.lazydeploy.model.server.ServerSnapshot;
 import com.yurepires.lazydeploy.repository.NotificationDeliveryAttemptRepository;
 import com.yurepires.lazydeploy.repository.NotificationStateRepository;
 import org.springframework.stereotype.Service;
@@ -12,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,11 +49,25 @@ public class NotificationPersistenceService {
             Instant attemptedAt,
             boolean successful
     ) {
+        return record(state, results, attemptedAt, successful, null, null);
+    }
+
+    @Transactional
+    public NotificationState record(
+            NotificationState state,
+            List<NotificationResult> results,
+            Instant attemptedAt,
+            boolean successful,
+            MonitoredServer configuration,
+            ServerSnapshot snapshot
+    ) {
         for (NotificationResult result : results) {
             NotificationDeliveryAttempt deliveryAttempt = createDeliveryAttempt(
                     state,
                     result,
-                    attemptedAt
+                    attemptedAt,
+                    configuration,
+                    snapshot
             );
             deliveryAttemptRepository.save(deliveryAttemptMapper.toEntity(deliveryAttempt));
         }
@@ -66,12 +85,13 @@ public class NotificationPersistenceService {
     private NotificationDeliveryAttempt createDeliveryAttempt(
             NotificationState state,
             NotificationResult result,
-            Instant attemptedAt
+            Instant attemptedAt,
+            MonitoredServer configuration,
+            ServerSnapshot snapshot
     ) {
         String status = "FAILED";
         Instant sentAt = null;
-        String errorCode = "DELIVERY_FAILED";
-
+        String errorCode = errorCodeFor(result.errorMessage());
         if (result.success()) {
             status = "SUCCESS";
             sentAt = result.sentAt();
@@ -88,8 +108,118 @@ public class NotificationPersistenceService {
                 sentAt,
                 errorCode,
                 sanitizeErrorMessage(result.errorMessage()),
-                Map.of()
+                Map.of(),
+                ownerUserId(configuration),
+                serverId(configuration),
+                serverDisplayName(configuration, snapshot),
+                mapId(snapshot),
+                mapDisplayName(snapshot),
+                playerCount(snapshot),
+                maxPlayers(snapshot),
+                gameMode(snapshot),
+                result.recipientSnapshot()
         );
+    }
+
+    private String errorCodeFor(String message) {
+        if (message == null) {
+            return "DELIVERY_FAILED";
+        }
+
+        String normalizedMessage = message.toLowerCase(Locale.ROOT);
+        if (normalizedMessage.contains("destinatário")
+                || normalizedMessage.contains("destinatario")
+                || normalizedMessage.contains("e-mail da conta")) {
+            return "NOTIFICATION_RECIPIENT_UNAVAILABLE";
+        }
+        if (normalizedMessage.contains("timeout")
+                || normalizedMessage.contains("timed out")) {
+            return "DELIVERY_TIMEOUT";
+        }
+        if (normalizedMessage.contains("authentication")
+                || normalizedMessage.contains("smtp")) {
+            return "MAIL_SEND_FAILED";
+        }
+        if (normalizedMessage.contains("connect")
+                || normalizedMessage.contains("unavailable")) {
+            return "CHANNEL_UNAVAILABLE";
+        }
+
+        return "DELIVERY_FAILED";
+    }
+
+    private UUID ownerUserId(MonitoredServer configuration) {
+        if (configuration == null) {
+            return null;
+        }
+        return configuration.userId();
+    }
+
+    private UUID serverId(MonitoredServer configuration) {
+        if (configuration == null) {
+            return null;
+        }
+        return configuration.serverId();
+    }
+
+    private String serverDisplayName(MonitoredServer configuration, ServerSnapshot snapshot) {
+        if (configuration != null
+                && configuration.displayName() != null
+                && !configuration.displayName().isBlank()) {
+            return configuration.displayName();
+        }
+        if (snapshot == null) {
+            return null;
+        }
+        return snapshot.serverGuid();
+    }
+
+    private String mapId(ServerSnapshot snapshot) {
+        if (snapshot == null || snapshot.map() == null) {
+            return null;
+        }
+
+        MapSnapshot map = snapshot.map();
+        if (map.normalizedId() != null && !map.normalizedId().isBlank()) {
+            return map.normalizedId();
+        }
+        return map.externalId();
+    }
+
+    private String mapDisplayName(ServerSnapshot snapshot) {
+        if (snapshot == null || snapshot.map() == null) {
+            return null;
+        }
+        return snapshot.map().displayName();
+    }
+
+    private Integer playerCount(ServerSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        PlayerSnapshot players = snapshot.players();
+        if (players == null) {
+            return null;
+        }
+        return players.current();
+    }
+
+    private Integer maxPlayers(ServerSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        PlayerSnapshot players = snapshot.players();
+        if (players == null) {
+            return null;
+        }
+        return players.maximum();
+    }
+
+    private String gameMode(ServerSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return snapshot.gameMode();
     }
 
     private String sanitizeErrorMessage(String message) {
@@ -98,6 +228,22 @@ public class NotificationPersistenceService {
         }
 
         String sanitizedMessage = message.replaceAll("[\\r\\n]+", " ");
+        sanitizedMessage = sanitizedMessage.replaceAll(
+                "(?i)(password|passwd|secret|token|authorization)\\s*[:=]\\s*\\S+",
+                "$1=[REDACTED]"
+        );
+
+        String normalizedMessage = sanitizedMessage.toLowerCase(Locale.ROOT);
+        if (normalizedMessage.contains("smtp")
+                || normalizedMessage.contains("authentication failed")
+                || normalizedMessage.contains("mail server connection failed")) {
+            return "Falha ao conectar ou autenticar no canal de e-mail";
+        }
+        if (normalizedMessage.contains("timed out")
+                || normalizedMessage.contains("timeout")) {
+            return "Tempo limite excedido no canal de entrega";
+        }
+
         if (sanitizedMessage.length() <= MAXIMUM_ERROR_MESSAGE_LENGTH) {
             return sanitizedMessage;
         }

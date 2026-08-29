@@ -13,7 +13,8 @@ public record MonitoredServer(
         boolean enabled,
         List<NotificationRuleDefinition> rules,
         List<NotificationChannelConfiguration> notificationChannels,
-        UUID serverId
+        UUID serverId,
+        UUID userId
 ) {
     public MonitoredServer(
             String id,
@@ -30,6 +31,28 @@ public record MonitoredServer(
                 enabled,
                 rules,
                 notificationChannels,
+                null,
+                null
+        );
+    }
+
+    public MonitoredServer(
+            String id,
+            ServerIdentifiers identifiers,
+            String displayName,
+            boolean enabled,
+            List<NotificationRuleDefinition> rules,
+            List<NotificationChannelConfiguration> notificationChannels,
+            UUID serverId
+    ) {
+        this(
+                id,
+                identifiers,
+                displayName,
+                enabled,
+                rules,
+                notificationChannels,
+                serverId,
                 null
         );
     }

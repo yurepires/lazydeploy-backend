@@ -18,14 +18,20 @@ public class EmailNotificationMessageRenderer implements NotificationMessageRend
         if (mapName == null) {
             mapName = candidate.server().map().normalizedId();
         }
-        String subject = "LazyDeploy: condições atendidas em " + serverName;
+        String subject = "LazyDeploy | Prepare-se para a batalha em " + serverName;
         String body = """
-                Servidor: %s
                 Mapa: %s
+                Servidor: %s
                 Jogadores: %d/%d
                 Modo: %s
+
+                O servidor atingiu as condições configuradas na sua assinatura, então este pode ser um bom momento para entrar na partida.
+
+                Boa jogatina!
+
+                LazyDeploy
                 """.formatted(
-                serverName, mapName, candidate.server().players().current(),
+                mapName, serverName, candidate.server().players().current(),
                 candidate.server().players().maximum(), candidate.server().gameMode()
         );
         return new RenderedNotification(subject, body);

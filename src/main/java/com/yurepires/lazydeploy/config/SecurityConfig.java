@@ -53,10 +53,14 @@ public class SecurityConfig {
                 ))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
-                                "/api/bf4/auth/register",
-                                "/api/bf4/auth/login",
-                                "/api/bf4/auth/csrf"
+                                "/api/auth/register",
+                                "/api/auth/login",
+                                "/api/auth/csrf"
                         ).permitAll()
+                        .requestMatchers("/api/auth/**").authenticated()
+                        // O namespace antigo não possui handlers; mantê-lo fora do wildcard
+                        // protegido permite que chamadas a rotas removidas retornem 404.
+                        .requestMatchers("/api/bf4/auth/**").permitAll()
                         .requestMatchers("/api/bf4/**").authenticated()
                         .anyRequest().permitAll()
                 )
@@ -67,7 +71,7 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 )
                 .logout(logout -> logout
-                        .logoutUrl("/api/bf4/auth/logout")
+                        .logoutUrl("/api/auth/logout")
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
                         .logoutSuccessHandler((request, response, authentication) ->

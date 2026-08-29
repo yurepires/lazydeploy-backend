@@ -100,11 +100,19 @@ public class NotificationOrchestrator {
                 notificationState.deduplicationKey(),
                 decision,
                 evaluatedAt,
-                candidateAttributes(configuration)
+                candidateAttributes(configuration),
+                configuration.userId()
         );
 
         List<NotificationResult> results = deliver(configuration, candidate);
-        persistence.record(notificationState, results, evaluatedAt, deliveryPolicy.isSuccessful(results));
+        persistence.record(
+                notificationState,
+                results,
+                evaluatedAt,
+                deliveryPolicy.isSuccessful(results),
+                configuration,
+                currentSnapshot
+        );
     }
 
     private List<NotificationResult> deliver(MonitoredServer server, NotificationCandidate candidate) {

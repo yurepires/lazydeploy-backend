@@ -28,7 +28,7 @@ public record ServerSubscription(
     public MonitoredServer toMonitoredServer() {
         return new MonitoredServer(
                 id.toString(), new ServerIdentifiers(externalGuid, null, null), server.displayName(),
-                enabled && server.enabled(), rules, channels, server.id()
+                enabled && server.enabled(), rules, channels, server.id(), userId
         );
     }
 }

@@ -23,4 +23,12 @@ class Bf4ApiPrefixTest {
             assertThat(mapping.value()).allMatch(path -> path.startsWith("/api/bf4/"));
         }
     }
+
+    @Test
+    void shouldKeepAuthenticationOutsideBf4Namespace() {
+        RequestMapping mapping = AuthController.class.getAnnotation(RequestMapping.class);
+
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.value()).containsExactly("/api/auth");
+    }
 }

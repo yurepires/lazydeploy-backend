@@ -11,6 +11,7 @@ import com.yurepires.lazydeploy.dto.request.SubscriptionCreationRequest;
 import com.yurepires.lazydeploy.dto.request.UpdateChannelRequest;
 import com.yurepires.lazydeploy.dto.request.UpdateRuleRequest;
 import com.yurepires.lazydeploy.exception.ChannelAlreadyExistsException;
+import com.yurepires.lazydeploy.exception.InvalidChannelConfigurationException;
 import com.yurepires.lazydeploy.exception.InvalidRequestException;
 import com.yurepires.lazydeploy.exception.NotificationChannelNotFoundException;
 import com.yurepires.lazydeploy.exception.NotificationRuleNotFoundException;
@@ -335,7 +336,8 @@ public class SubscriptionApplicationService {
                 new CreateChannelRequest(
                         request.type(),
                         request.enabled(),
-                        request.parameters()
+                        request.parameters(),
+                        request.recipient()
                 )
         );
     }
@@ -371,6 +373,7 @@ public class SubscriptionApplicationService {
     ) {
         ServerSubscription currentSubscription = get(userId, subscriptionId);
         String normalizedType = channelValidatorRegistry.normalizeType(request.type());
+        rejectRootRecipient(normalizedType, request.recipient());
         channelValidatorRegistry.validate(normalizedType, request.parameters());
 
         boolean typeAlreadyExists = currentSubscription.channels().stream()
@@ -403,7 +406,8 @@ public class SubscriptionApplicationService {
                 new UpdateChannelRequest(
                         request.type(),
                         request.enabled(),
-                        request.parameters()
+                        request.parameters(),
+                        request.recipient()
                 )
         );
     }
@@ -420,6 +424,7 @@ public class SubscriptionApplicationService {
                 .filter(channel -> channelId.equals(channel.id()))
                 .findFirst()
                 .orElseThrow(NotificationChannelNotFoundException::new);
+        rejectRootRecipient(normalizedType, request.recipient());
         channelValidatorRegistry.validate(normalizedType, request.parameters());
 
         boolean anotherChannelUsesType = currentSubscription.channels().stream()
@@ -679,6 +684,7 @@ public class SubscriptionApplicationService {
             UUID channelId,
             NotificationChannelRequest request
     ) {
+        rejectRootRecipient(request.type(), request.recipient());
         return createChannelConfiguration(
                 channelId,
                 request.type(),
@@ -702,6 +708,14 @@ public class SubscriptionApplicationService {
                 enabled,
                 parameters
         );
+    }
+
+    private void rejectRootRecipient(String channelType, String recipient) {
+        if ("EMAIL".equalsIgnoreCase(channelType) && recipient != null) {
+            throw new InvalidChannelConfigurationException(
+                    "O campo recipient não é aceito para canais de notificação"
+            );
+        }
     }
 
     private ServerSubscription saveWithRules(

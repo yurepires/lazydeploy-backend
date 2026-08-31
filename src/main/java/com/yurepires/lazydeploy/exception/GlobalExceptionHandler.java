@@ -172,7 +172,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedError(Exception exception, HttpServletRequest request) {
-        log.error("Erro inesperado ao processar {}", request.getRequestURI(), exception);
+        log.error(
+                "Erro inesperado ao processar {} | exceptionType={}",
+                request.getRequestURI(),
+                exception.getClass().getSimpleName()
+        );
 
         ErrorResponse response = createErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,

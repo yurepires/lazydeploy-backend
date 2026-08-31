@@ -3,6 +3,7 @@ package com.yurepires.lazydeploy.service.auth;
 import com.yurepires.lazydeploy.dto.request.RegisterUserRequest;
 import com.yurepires.lazydeploy.dto.response.AuthenticatedUserResponse;
 import com.yurepires.lazydeploy.entity.UserEntity;
+import com.yurepires.lazydeploy.entity.UserRole;
 import com.yurepires.lazydeploy.exception.EmailAlreadyRegisteredException;
 import com.yurepires.lazydeploy.repository.UserRepository;
 import com.yurepires.lazydeploy.security.EmailNormalizer;
@@ -44,6 +45,7 @@ public class RegisterUserService {
                 null,
                 normalizedEmail,
                 passwordEncoder.encode(request.password()),
+                UserRole.USER,
                 true,
                 currentTime,
                 currentTime

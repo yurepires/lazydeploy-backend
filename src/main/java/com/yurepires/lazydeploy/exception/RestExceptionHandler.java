@@ -88,7 +88,11 @@ public class RestExceptionHandler {
         }
 
         if (exception instanceof DataIntegrityViolationException) {
-            log.warn("Violação de integridade ao processar {}", request.getRequestURI(), exception);
+            log.warn(
+                    "Violação de integridade ao processar {} | exceptionType={}",
+                    request.getRequestURI(),
+                    exception.getClass().getSimpleName()
+            );
         }
 
         return response(
@@ -266,7 +270,11 @@ public class RestExceptionHandler {
             Exception exception,
             HttpServletRequest request
     ) {
-        log.error("Erro inesperado ao processar {}", request.getRequestURI(), exception);
+        log.error(
+                "Erro inesperado ao processar {} | exceptionType={}",
+                request.getRequestURI(),
+                exception.getClass().getSimpleName()
+        );
         return response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Internal server error",

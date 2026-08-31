@@ -30,6 +30,38 @@ server:
         secure: ${SESSION_COOKIE_SECURE:false}
         same-site: lax
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+  health:
+    mail:
+      enabled: false
+  info:
+    env:
+      enabled: false
+    java:
+      enabled: true
+  metrics:
+    tags:
+      application: lazydeploy
+
+info:
+  app:
+    name: LazyDeploy
+    version: ${APP_VERSION:0.0.1-SNAPSHOT}
+
 lazydeploy:
   game-tools-base-url: https://api.gametools.network
   battlelog-keeper-base-url: https://keeper.battlelog.com

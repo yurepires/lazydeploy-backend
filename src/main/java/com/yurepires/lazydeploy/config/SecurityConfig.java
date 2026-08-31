@@ -57,6 +57,13 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/csrf"
                         ).permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers(
+                                "/actuator/info",
+                                "/actuator/metrics",
+                                "/actuator/metrics/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers("/actuator/**").authenticated()
                         .requestMatchers("/api/auth/**").authenticated()
                         // O namespace antigo não possui handlers; mantê-lo fora do wildcard
                         // protegido permite que chamadas a rotas removidas retornem 404.

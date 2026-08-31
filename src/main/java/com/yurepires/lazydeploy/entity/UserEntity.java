@@ -1,6 +1,8 @@
 package com.yurepires.lazydeploy.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -24,6 +26,10 @@ public class UserEntity {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private UserRole role = UserRole.USER;
+
     @Column(nullable = false)
     private boolean enabled;
 
@@ -41,6 +47,7 @@ public class UserEntity {
             UUID id,
             String email,
             String passwordHash,
+            UserRole role,
             boolean enabled,
             Instant createdAt,
             Instant updatedAt
@@ -48,9 +55,37 @@ public class UserEntity {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
+        if (role == null) {
+            this.role = UserRole.USER;
+        } else {
+            this.role = role;
+        }
         this.enabled = enabled;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+    }
+
+    public UserEntity(
+            UUID id,
+            String email,
+            String passwordHash,
+            boolean enabled,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        this(id, email, passwordHash, UserRole.USER, enabled, createdAt, updatedAt);
+    }
+
+    public UserEntity(
+            UUID id,
+            String email,
+            String passwordHash,
+            boolean enabled,
+            UserRole role,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        this(id, email, passwordHash, role, enabled, createdAt, updatedAt);
     }
 
     public UUID getId() {
@@ -63,6 +98,10 @@ public class UserEntity {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public UserRole getRole() {
+        return role;
     }
 
     public boolean isEnabled() {

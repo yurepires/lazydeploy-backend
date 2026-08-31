@@ -42,7 +42,7 @@ public class ServerSnapshotEnricher {
         boolean knownMap = mapCatalogService.isKnownMap(normalizedMapId);
         String displayName = mapCatalogService.getDisplayName(normalizedMapId);
         if (!knownMap) {
-            log.info("Mapa não catalogado recebido do Keeper | mapId={}", normalizedMapId);
+            log.warn("Mapa não catalogado recebido do Keeper | mapId={}", normalizedMapId);
         }
 
         MapSnapshot enrichedMap = new MapSnapshot(

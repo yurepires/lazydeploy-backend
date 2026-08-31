@@ -31,7 +31,8 @@ public class LazyDeployUserDetailsService implements UserDetailsService {
                 user.getId(),
                 user.getEmail(),
                 user.getPasswordHash(),
-                user.isEnabled()
+                user.isEnabled(),
+                user.getRole()
         );
     }
 }

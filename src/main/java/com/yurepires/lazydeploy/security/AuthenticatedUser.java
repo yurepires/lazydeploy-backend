@@ -1,6 +1,8 @@
 package com.yurepires.lazydeploy.security;
 
+import com.yurepires.lazydeploy.entity.UserRole;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
@@ -13,6 +15,7 @@ public final class AuthenticatedUser implements UserDetails {
     private final String email;
     private final String passwordHash;
     private final boolean enabled;
+    private final UserRole role;
 
     public AuthenticatedUser(
             UUID userId,
@@ -20,10 +23,25 @@ public final class AuthenticatedUser implements UserDetails {
             String passwordHash,
             boolean enabled
     ) {
+        this(userId, email, passwordHash, enabled, UserRole.USER);
+    }
+
+    public AuthenticatedUser(
+            UUID userId,
+            String email,
+            String passwordHash,
+            boolean enabled,
+            UserRole role
+    ) {
         this.userId = userId;
         this.email = email;
         this.passwordHash = passwordHash;
         this.enabled = enabled;
+        if (role == null) {
+            this.role = UserRole.USER;
+        } else {
+            this.role = role;
+        }
     }
 
     public UUID userId() {
@@ -39,6 +57,10 @@ public final class AuthenticatedUser implements UserDetails {
         return email;
     }
 
+    public UserRole role() {
+        return role;
+    }
+
     @Override
     public String getPassword() {
         return passwordHash;
@@ -46,7 +68,7 @@ public final class AuthenticatedUser implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
 
     @Override

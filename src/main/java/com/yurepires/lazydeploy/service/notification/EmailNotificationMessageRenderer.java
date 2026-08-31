@@ -29,7 +29,7 @@ public class EmailNotificationMessageRenderer implements NotificationMessageRend
 
                 Boa jogatina!
 
-                LazyDeploy
+                LazyDeploy.
                 """.formatted(
                 mapName, serverName, candidate.server().players().current(),
                 candidate.server().players().maximum(), candidate.server().gameMode()

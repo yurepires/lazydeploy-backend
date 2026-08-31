@@ -7,7 +7,6 @@ import com.yurepires.lazydeploy.model.persistence.ServerIdentifier;
 import com.yurepires.lazydeploy.repository.ServerRepository;
 import com.yurepires.lazydeploy.repository.ServerIdentifierRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -34,7 +33,12 @@ public class NewServerTransaction {
         this.clock = clock;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    /**
+     * Participa da transação da operação que está criando a subscription.
+     * Assim, um erro ao salvar regras ou canais também desfaz um servidor
+     * criado durante a mesma configuração.
+     */
+    @Transactional
     public Server create(String guid, String displayName) {
         Instant currentTime = Instant.now(clock);
         Server server = new Server(

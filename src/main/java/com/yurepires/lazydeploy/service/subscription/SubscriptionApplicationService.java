@@ -93,7 +93,7 @@ public class SubscriptionApplicationService {
                 new CreateSubscriptionRequest(
                         request.serverGuid(),
                         request.displayName(),
-                        true
+                        request.enabled()
                 )
         );
 

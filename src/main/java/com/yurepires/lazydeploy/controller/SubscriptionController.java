@@ -3,6 +3,7 @@ package com.yurepires.lazydeploy.controller;
 import com.yurepires.lazydeploy.dto.request.CreateChannelRequest;
 import com.yurepires.lazydeploy.dto.request.CreateRuleRequest;
 import com.yurepires.lazydeploy.dto.request.CreateSubscriptionRequest;
+import com.yurepires.lazydeploy.dto.request.ConfigureSubscriptionRequest;
 import com.yurepires.lazydeploy.dto.request.PatchChannelRequest;
 import com.yurepires.lazydeploy.dto.request.PatchRuleRequest;
 import com.yurepires.lazydeploy.dto.request.PatchSubscriptionRequest;
@@ -10,12 +11,14 @@ import com.yurepires.lazydeploy.dto.request.UpdateChannelRequest;
 import com.yurepires.lazydeploy.dto.request.UpdateRuleRequest;
 import com.yurepires.lazydeploy.dto.request.UpdateSubscriptionRequest;
 import com.yurepires.lazydeploy.dto.response.ChannelResponse;
+import com.yurepires.lazydeploy.dto.response.ConfiguredSubscriptionResponse;
 import com.yurepires.lazydeploy.dto.response.RuleResponse;
 import com.yurepires.lazydeploy.dto.response.SubscriptionResponse;
 import com.yurepires.lazydeploy.model.notification.NotificationChannelConfiguration;
 import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.security.CurrentUserProvider;
 import com.yurepires.lazydeploy.service.subscription.SubscriptionApplicationService;
+import com.yurepires.lazydeploy.service.subscription.ConfigureSubscriptionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,11 +40,27 @@ import java.util.UUID;
 public class SubscriptionController {
 
     private final SubscriptionApplicationService subscriptionService;
+    private final ConfigureSubscriptionService configureSubscriptionService;
     private final CurrentUserProvider currentUserProvider;
 
-    public SubscriptionController(SubscriptionApplicationService subscriptionService, CurrentUserProvider currentUserProvider) {
+    public SubscriptionController(
+            SubscriptionApplicationService subscriptionService,
+            ConfigureSubscriptionService configureSubscriptionService,
+            CurrentUserProvider currentUserProvider
+    ) {
         this.subscriptionService = subscriptionService;
+        this.configureSubscriptionService = configureSubscriptionService;
         this.currentUserProvider = currentUserProvider;
+    }
+
+    @PostMapping("/configure")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ConfiguredSubscriptionResponse configure(
+            @Valid @RequestBody ConfigureSubscriptionRequest request
+    ) {
+        return ConfiguredSubscriptionResponse.from(
+                configureSubscriptionService.configure(request)
+        );
     }
 
     @PostMapping

@@ -109,7 +109,10 @@ public class RestExceptionHandler {
             InvalidRuleParametersException.class,
             UnsupportedChannelTypeException.class,
             InvalidChannelConfigurationException.class,
-            UnknownMapException.class
+            UnknownMapException.class,
+            DuplicateRuleTypeException.class,
+            DuplicateChannelTypeException.class,
+            NoActiveNotificationChannelException.class
     })
     public ResponseEntity<ProblemDetail> handleUnprocessableEntity(
             Exception exception,

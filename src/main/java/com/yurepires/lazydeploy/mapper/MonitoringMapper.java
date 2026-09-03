@@ -24,5 +24,21 @@ public interface MonitoringMapper {
 
     ServerState toDomain(ServerStateEntity serverStateEntity);
 
-    ServerStateEntity toEntity(ServerState serverState);
+    default ServerStateEntity toEntity(ServerState serverState) {
+        if (serverState == null) {
+            return null;
+        }
+
+        return new ServerStateEntity(
+                serverState.serverId(),
+                serverState.roundInstanceId(),
+                serverState.mapId(),
+                serverState.previousRoundTimeSeconds(),
+                serverState.roundDetectedAt(),
+                serverState.lastObservedAt(),
+                serverState.playerCount(),
+                serverState.maxPlayers(),
+                serverState.gameMode()
+        );
+    }
 }

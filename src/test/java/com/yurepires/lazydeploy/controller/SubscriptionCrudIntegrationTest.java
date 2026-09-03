@@ -58,6 +58,13 @@ class SubscriptionCrudIntegrationTest {
         String subscriptionId = createdSubscription.get("id").asString();
         UUID serverId = UUID.fromString(createdSubscription.get("server").get("id").asString());
 
+        mockMvc.perform(get("/api/bf4/subscriptions")
+                        .session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].currentStatus.available").value(false))
+                .andExpect(jsonPath("$[0].currentStatus.availabilityReason")
+                        .value("NOT_OBSERVED_YET"));
+
         mockMvc.perform(post("/api/bf4/subscriptions")
                         .with(csrf())
                         .session(session)
@@ -133,9 +140,17 @@ class SubscriptionCrudIntegrationTest {
                         .with(csrf())
                         .session(session)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"enabled\":false}"))
+                        .content("""
+                                {
+                                  "type": "MAP_IN",
+                                  "enabled": false,
+                                  "parameters": {"values": ["XP0_Metro"]}
+                                }
+                                """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.enabled").value(false));
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.type").value("MAP_IN"))
+                .andExpect(jsonPath("$.parameters.values[0]").value("XP0_Metro"));
 
         mockMvc.perform(put("/api/bf4/subscriptions/" + subscriptionId + "/rules/" + ruleId)
                         .with(csrf())

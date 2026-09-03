@@ -9,5 +9,30 @@ public record ServerState(
         String mapId,
         long previousRoundTimeSeconds,
         Instant roundDetectedAt,
-        Instant lastObservedAt
-) {}
+        Instant lastObservedAt,
+        Integer playerCount,
+        Integer maxPlayers,
+        String gameMode
+) {
+
+    public ServerState(
+            UUID serverId,
+            UUID roundInstanceId,
+            String mapId,
+            long previousRoundTimeSeconds,
+            Instant roundDetectedAt,
+            Instant lastObservedAt
+    ) {
+        this(
+                serverId,
+                roundInstanceId,
+                mapId,
+                previousRoundTimeSeconds,
+                roundDetectedAt,
+                lastObservedAt,
+                null,
+                null,
+                null
+        );
+    }
+}

@@ -2,11 +2,13 @@ package com.yurepires.lazydeploy.controller;
 
 import com.yurepires.lazydeploy.entity.UserEntity;
 import com.yurepires.lazydeploy.repository.UserRepository;
+import jakarta.servlet.http.Cookie;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
@@ -50,6 +52,28 @@ class AuthenticationIntegrationTest {
         assertThat(user.getPasswordHash()).isNotEqualTo(rawPassword);
         assertThat(user.getPasswordHash()).startsWith("{bcrypt}");
         assertThat(user.getEmail()).isEqualTo("user@example.com");
+    }
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+    void shouldAcceptAngularCsrfCookieAndHeaderPair() throws Exception {
+        MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String csrfToken = csrfResult.getResponse().getContentAsString();
+        Cookie csrfCookie = csrfResult.getResponse().getCookie("XSRF-TOKEN");
+
+        assertThat(csrfToken).isNotBlank();
+        assertThat(csrfCookie).isNotNull();
+        assertThat(csrfCookie.getValue()).isEqualTo(csrfToken);
+
+        mockMvc.perform(post("/api/auth/register")
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(uniqueEmail(), "password-123")))
+                .andExpect(status().isCreated());
     }
 
     @Test

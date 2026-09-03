@@ -13,8 +13,30 @@ public record SubscriptionResponse(
         Instant updatedAt,
         ServerReferenceResponse server,
         List<RuleResponse> rules,
-        List<ChannelResponse> channels
+        List<ChannelResponse> channels,
+        CurrentServerStatusResponse currentStatus
 ) {
+
+    public SubscriptionResponse(
+            UUID id,
+            boolean enabled,
+            Instant createdAt,
+            Instant updatedAt,
+            ServerReferenceResponse server,
+            List<RuleResponse> rules,
+            List<ChannelResponse> channels
+    ) {
+        this(
+                id,
+                enabled,
+                createdAt,
+                updatedAt,
+                server,
+                rules,
+                channels,
+                unavailableStatus()
+        );
+    }
 
     public SubscriptionResponse {
         if (rules == null) {
@@ -28,9 +50,23 @@ public record SubscriptionResponse(
         } else {
             channels = List.copyOf(channels);
         }
+
+        if (currentStatus == null) {
+            currentStatus = unavailableStatus();
+        }
     }
 
     public static SubscriptionResponse from(ServerSubscription subscription) {
+        return from(
+                subscription,
+                unavailableStatus()
+        );
+    }
+
+    public static SubscriptionResponse from(
+            ServerSubscription subscription,
+            CurrentServerStatusResponse currentStatus
+    ) {
         List<RuleResponse> rules = subscription.rules().stream()
                 .map(RuleResponse::from)
                 .toList();
@@ -45,7 +81,20 @@ public record SubscriptionResponse(
                 subscription.updatedAt(),
                 ServerReferenceResponse.from(subscription.server(), subscription.externalGuid()),
                 rules,
-                channels
+                channels,
+                currentStatus
+        );
+    }
+
+    private static CurrentServerStatusResponse unavailableStatus() {
+        return new CurrentServerStatusResponse(
+                false,
+                "NOT_OBSERVED_YET",
+                null,
+                null,
+                null,
+                null,
+                null
         );
     }
 }

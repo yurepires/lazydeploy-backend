@@ -19,6 +19,7 @@ import com.yurepires.lazydeploy.model.rule.NotificationRuleDefinition;
 import com.yurepires.lazydeploy.security.CurrentUserProvider;
 import com.yurepires.lazydeploy.service.subscription.SubscriptionApplicationService;
 import com.yurepires.lazydeploy.service.subscription.ConfigureSubscriptionService;
+import com.yurepires.lazydeploy.service.subscription.SubscriptionQueryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -41,15 +42,18 @@ public class SubscriptionController {
 
     private final SubscriptionApplicationService subscriptionService;
     private final ConfigureSubscriptionService configureSubscriptionService;
+    private final SubscriptionQueryService subscriptionQueryService;
     private final CurrentUserProvider currentUserProvider;
 
     public SubscriptionController(
             SubscriptionApplicationService subscriptionService,
             ConfigureSubscriptionService configureSubscriptionService,
+            SubscriptionQueryService subscriptionQueryService,
             CurrentUserProvider currentUserProvider
     ) {
         this.subscriptionService = subscriptionService;
         this.configureSubscriptionService = configureSubscriptionService;
+        this.subscriptionQueryService = subscriptionQueryService;
         this.currentUserProvider = currentUserProvider;
     }
 
@@ -73,16 +77,13 @@ public class SubscriptionController {
     @GetMapping
     public List<SubscriptionResponse> list() {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
-        return subscriptionService.list(currentUserId)
-                .stream()
-                .map(SubscriptionResponse::from)
-                .toList();
+        return subscriptionQueryService.list(currentUserId);
     }
 
     @GetMapping("/{id}")
     public SubscriptionResponse get(@PathVariable UUID id) {
         UUID currentUserId = currentUserProvider.getCurrentUserId();
-        return SubscriptionResponse.from(subscriptionService.get(currentUserId, id));
+        return subscriptionQueryService.get(currentUserId, id);
     }
 
     @PutMapping("/{id}")

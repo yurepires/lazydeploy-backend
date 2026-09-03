@@ -304,11 +304,21 @@ public class SubscriptionApplicationService {
 
         for (NotificationRuleDefinition currentRule : currentSubscription.rules()) {
             if (ruleId.equals(currentRule.id())) {
-                updatedRules.add(new NotificationRuleDefinition(
+                String updatedType = currentRule.type();
+                if (request.type() != null) {
+                    updatedType = request.type();
+                }
+
+                Map<String, Object> updatedParameters = currentRule.parameters();
+                if (request.parameters() != null) {
+                    updatedParameters = request.parameters();
+                }
+
+                updatedRules.add(createRuleDefinition(
                         ruleId,
-                        currentRule.type(),
+                        updatedType,
                         request.enabled(),
-                        currentRule.parameters(),
+                        updatedParameters,
                         currentRule.createdAt(),
                         currentRule.updatedAt()
                 ));

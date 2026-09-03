@@ -1,7 +1,9 @@
 package com.yurepires.lazydeploy.service.monitoring;
 
 import com.yurepires.lazydeploy.mapper.MonitoringMapper;
-import com.yurepires.lazydeploy.model.monitoring.*;
+import com.yurepires.lazydeploy.model.monitoring.RoundInstance;
+import com.yurepires.lazydeploy.model.monitoring.RoundTransitionDetector;
+import com.yurepires.lazydeploy.model.monitoring.ServerState;
 import com.yurepires.lazydeploy.model.persistence.Server;
 import com.yurepires.lazydeploy.repository.RoundInstanceRepository;
 import com.yurepires.lazydeploy.repository.ServerStateRepository;
@@ -92,13 +94,23 @@ public class MonitoringStateService {
             ServerSnapshot currentSnapshot,
             RoundInstance currentRound
     ) {
+        Integer playerCount = null;
+        Integer maxPlayers = null;
+        if (currentSnapshot.players() != null) {
+            playerCount = currentSnapshot.players().current();
+            maxPlayers = currentSnapshot.players().maximum();
+        }
+
         ServerState currentState = new ServerState(
                 server.id(),
                 currentRound.id(),
                 currentSnapshot.map().normalizedId(),
                 currentSnapshot.roundTimeSeconds(),
                 currentRound.detectedAt(),
-                currentSnapshot.capturedAt()
+                currentSnapshot.capturedAt(),
+                playerCount,
+                maxPlayers,
+                currentSnapshot.gameMode()
         );
 
         return monitoringMapper.toDomain(

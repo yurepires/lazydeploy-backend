@@ -38,7 +38,11 @@ public class KeeperSnapshotMapper {
         return new ServerSnapshot(
                 server.externalGuid(),
                 new MapSnapshot(snapshot.currentMap(), normalizedMap, null),
-                new PlayerSnapshot(countPlayers(snapshot.teamInfo()), snapshot.maxPlayers(), snapshot.waitingPlayers()),
+                new PlayerSnapshot(
+                        countPlayers(snapshot.teamInfo()),
+                        snapshot.maxPlayers(),
+                        snapshot.waitingPlayers()
+                ),
                 snapshot.gameMode(),
                 snapshot.roundTime(),
                 Instant.now(clock),

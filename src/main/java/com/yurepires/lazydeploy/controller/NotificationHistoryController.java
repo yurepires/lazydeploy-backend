@@ -10,8 +10,6 @@ import com.yurepires.lazydeploy.service.notification.history.ListSubscriptionNot
 import com.yurepires.lazydeploy.service.notification.history.NotificationHistoryQueryServiceSupport;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,11 +50,8 @@ public class NotificationHistoryController {
             @RequestParam(required = false) String mapId,
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to,
-            @PageableDefault(
-                    size = NotificationHistoryQueryServiceSupport.DEFAULT_PAGE_SIZE,
-                    sort = "attemptedAt",
-                    direction = Sort.Direction.DESC
-            )
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             Pageable pageable
     ) {
         NotificationHistoryFilter filter = querySupport.createFilter(
@@ -68,9 +63,10 @@ public class NotificationHistoryController {
                 from,
                 to
         );
-        Page<NotificationHistoryResponse> page = listHistoryService.list(filter, pageable)
+        Pageable validatedPageable = querySupport.normalizePageable(pageable, page, size);
+        Page<NotificationHistoryResponse> pageResponse = listHistoryService.list(filter, validatedPageable)
                 .map(NotificationHistoryResponse::from);
-        return PageResponse.from(page);
+        return PageResponse.from(pageResponse);
     }
 
     @GetMapping("/notifications/{notificationId}")
@@ -87,11 +83,8 @@ public class NotificationHistoryController {
             @RequestParam(required = false) String mapId,
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to,
-            @PageableDefault(
-                    size = NotificationHistoryQueryServiceSupport.DEFAULT_PAGE_SIZE,
-                    sort = "attemptedAt",
-                    direction = Sort.Direction.DESC
-            )
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             Pageable pageable
     ) {
         NotificationHistoryFilter filter = querySupport.createFilter(
@@ -103,10 +96,11 @@ public class NotificationHistoryController {
                 from,
                 to
         );
-        Page<NotificationHistoryResponse> page = listSubscriptionHistoryService
-                .list(subscriptionId, filter, pageable)
+        Pageable validatedPageable = querySupport.normalizePageable(pageable, page, size);
+        Page<NotificationHistoryResponse> pageResponse = listSubscriptionHistoryService
+                .list(subscriptionId, filter, validatedPageable)
                 .map(NotificationHistoryResponse::from);
-        return PageResponse.from(page);
+        return PageResponse.from(pageResponse);
     }
 
     private String selectChannel(String channel, String channelType) {

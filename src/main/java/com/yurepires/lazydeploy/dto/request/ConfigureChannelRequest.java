@@ -2,6 +2,7 @@ package com.yurepires.lazydeploy.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -11,7 +12,7 @@ import java.util.Map;
  * Canal criado junto com uma nova subscription.
  */
 public record ConfigureChannelRequest(
-        @NotBlank String type,
+        @NotBlank @Size(max = 64) String type,
         Boolean enabled,
         Map<String, Object> parameters,
         @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String recipient

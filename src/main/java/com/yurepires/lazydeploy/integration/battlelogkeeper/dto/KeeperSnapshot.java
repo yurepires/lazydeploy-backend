@@ -10,9 +10,9 @@ public record KeeperSnapshot(
         String gameMode,
         Integer mapVariant,
         String currentMap,
-        int maxPlayers,
-        int waitingPlayers,
-        long roundTime,
+        Integer maxPlayers,
+        Integer waitingPlayers,
+        Long roundTime,
         Integer defaultRoundTimeMultiplier,
         Map<String, KeeperTeamInfo> teamInfo,
         Map<String, KeeperTicketInfo> conquest

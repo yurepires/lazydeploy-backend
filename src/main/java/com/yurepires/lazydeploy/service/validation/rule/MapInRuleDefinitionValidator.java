@@ -2,6 +2,8 @@ package com.yurepires.lazydeploy.service.validation.rule;
 
 import com.yurepires.lazydeploy.exception.InvalidRuleParametersException;
 import com.yurepires.lazydeploy.exception.UnknownMapException;
+import com.yurepires.lazydeploy.exception.TooManyMapsException;
+import com.yurepires.lazydeploy.service.validation.BusinessLimitService;
 import com.yurepires.lazydeploy.service.map.MapCatalogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -16,14 +18,24 @@ import java.util.Map;
 public class MapInRuleDefinitionValidator implements RuleDefinitionValidator {
 
     private final MapCatalogService mapCatalogService;
+    private final BusinessLimitService businessLimitService;
 
     public MapInRuleDefinitionValidator() {
-        this.mapCatalogService = null;
+        this(null);
+    }
+
+    public MapInRuleDefinitionValidator(MapCatalogService mapCatalogService) {
+        this.mapCatalogService = mapCatalogService;
+        this.businessLimitService = null;
     }
 
     @Autowired
-    public MapInRuleDefinitionValidator(MapCatalogService mapCatalogService) {
+    public MapInRuleDefinitionValidator(
+            MapCatalogService mapCatalogService,
+            BusinessLimitService businessLimitService
+    ) {
         this.mapCatalogService = mapCatalogService;
+        this.businessLimitService = businessLimitService;
     }
 
     @Override
@@ -44,6 +56,17 @@ public class MapInRuleDefinitionValidator implements RuleDefinitionValidator {
             throw new InvalidRuleParametersException(
                     "MAP_IN requer uma coleção não vazia no parâmetro 'values'"
             );
+        }
+
+        int maximumMaps = 20;
+        if (businessLimitService != null) {
+            maximumMaps = businessLimitService.maximumMapsPerMapInRule();
+        }
+        if (collection.size() > maximumMaps) {
+            if (businessLimitService != null) {
+                businessLimitService.recordMapLimitRejection();
+            }
+            throw new TooManyMapsException();
         }
 
         boolean catalogHasEntries = mapCatalogService != null

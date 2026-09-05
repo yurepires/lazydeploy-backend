@@ -9,6 +9,7 @@ import com.yurepires.lazydeploy.security.CurrentUserProvider;
 import com.yurepires.lazydeploy.security.EmailNormalizer;
 import com.yurepires.lazydeploy.service.auth.CurrentUserProfileService;
 import com.yurepires.lazydeploy.service.auth.RegisterUserService;
+import com.yurepires.lazydeploy.service.observability.SecurityMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -38,6 +39,7 @@ public class AuthController {
     private final EmailNormalizer emailNormalizer;
     private final CurrentUserProvider currentUserProvider;
     private final CurrentUserProfileService currentUserProfileService;
+    private final SecurityMetrics securityMetrics;
 
     public AuthController(
             RegisterUserService registerUserService,
@@ -45,7 +47,8 @@ public class AuthController {
             SecurityContextRepository securityContextRepository,
             EmailNormalizer emailNormalizer,
             CurrentUserProvider currentUserProvider,
-            CurrentUserProfileService currentUserProfileService
+            CurrentUserProfileService currentUserProfileService,
+            SecurityMetrics securityMetrics
     ) {
         this.registerUserService = registerUserService;
         this.authenticationManager = authenticationManager;
@@ -53,6 +56,7 @@ public class AuthController {
         this.emailNormalizer = emailNormalizer;
         this.currentUserProvider = currentUserProvider;
         this.currentUserProfileService = currentUserProfileService;
+        this.securityMetrics = securityMetrics;
     }
 
     @PostMapping("/register")
@@ -79,6 +83,7 @@ public class AuthController {
                     )
             );
         } catch (AuthenticationException exception) {
+            securityMetrics.recordLoginAttempt("invalid_credentials");
             throw new InvalidCredentialsException();
         }
 
@@ -88,6 +93,7 @@ public class AuthController {
         securityContextRepository.saveContext(securityContext, httpRequest, httpResponse);
 
         AuthenticatedUser authenticatedUser = (AuthenticatedUser) authentication.getPrincipal();
+        securityMetrics.recordLoginAttempt("success");
         return AuthenticatedUserResponse.from(authenticatedUser);
     }
 

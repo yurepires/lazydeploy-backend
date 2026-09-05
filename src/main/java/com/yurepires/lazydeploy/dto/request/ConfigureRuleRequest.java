@@ -2,6 +2,7 @@ package com.yurepires.lazydeploy.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -11,7 +12,7 @@ import java.util.Map;
  * Regra criada junto com uma nova subscription.
  */
 public record ConfigureRuleRequest(
-        @NotBlank String type,
+        @NotBlank @Size(max = 64) String type,
         Boolean enabled,
         @NotNull Map<String, Object> parameters
 ) {

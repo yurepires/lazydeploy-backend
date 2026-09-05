@@ -3,6 +3,7 @@ package com.yurepires.lazydeploy.dto.request;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.Locale;
@@ -12,7 +13,7 @@ import java.util.Locale;
  */
 public record ConfigureSubscriptionRequest(
         @NotBlank String serverGuid,
-        String displayName,
+        @Size(max = 255) String displayName,
         Boolean enabled,
         @NotNull List<@Valid ConfigureRuleRequest> rules,
         @NotNull List<@Valid ConfigureChannelRequest> channels

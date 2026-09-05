@@ -1,19 +1,22 @@
 package com.yurepires.lazydeploy.integration.gametools;
 
-import com.yurepires.lazydeploy.exception.ExternalProviderUnavailableException;
+import com.yurepires.lazydeploy.config.ProviderProperties;
+import com.yurepires.lazydeploy.exception.ExternalProviderException;
+import com.yurepires.lazydeploy.exception.ExternalProviderFailureCategory;
 import com.yurepires.lazydeploy.model.server.ServerDiscoveryProvider;
 import com.yurepires.lazydeploy.model.server.ServerReference;
 import com.yurepires.lazydeploy.model.server.ServerSearchQuery;
 import com.yurepires.lazydeploy.service.observability.ExternalProviderHealthTracker;
+import com.yurepires.lazydeploy.service.observability.ExternalProviderMetrics;
 import com.yurepires.lazydeploy.service.observability.GameToolsMetrics;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.yurepires.lazydeploy.service.provider.ExternalProviderFailureClassifier;
+import com.yurepires.lazydeploy.service.provider.ProviderConcurrencyLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientRequestException;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -25,25 +28,90 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
 
     public static final String PROVIDER_ID = "GAMETOOLS";
     private static final Logger log = LoggerFactory.getLogger(GameToolsServerDiscoveryProvider.class);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final WebClient webClient;
     private final GameToolsMetrics metrics;
     private final ExternalProviderHealthTracker healthTracker;
+    private final ExternalProviderMetrics providerMetrics;
+    private final ProviderConcurrencyLimiter concurrencyLimiter;
+    private final ProviderProperties.ProviderSettings settings;
 
     public GameToolsServerDiscoveryProvider(@Qualifier("gameToolsWebClient") WebClient webClient) {
-        this(webClient, GameToolsMetrics.noop(), new ExternalProviderHealthTracker());
+        this(
+                webClient,
+                GameToolsMetrics.noop(),
+                new ExternalProviderHealthTracker(),
+                ExternalProviderMetrics.noop(),
+                null,
+                ProviderProperties.ProviderSettings.gameToolsDefaults()
+        );
+    }
+
+    public GameToolsServerDiscoveryProvider(
+            @Qualifier("gameToolsWebClient") WebClient webClient,
+            GameToolsMetrics metrics,
+            ExternalProviderHealthTracker healthTracker
+    ) {
+        this(
+                webClient,
+                metrics,
+                healthTracker,
+                ExternalProviderMetrics.noop(),
+                null,
+                ProviderProperties.ProviderSettings.gameToolsDefaults()
+        );
+    }
+
+    public GameToolsServerDiscoveryProvider(
+            @Qualifier("gameToolsWebClient") WebClient webClient,
+            GameToolsMetrics metrics,
+            ExternalProviderHealthTracker healthTracker,
+            ExternalProviderMetrics providerMetrics,
+            ProviderConcurrencyLimiter concurrencyLimiter
+    ) {
+        this(
+                webClient,
+                metrics,
+                healthTracker,
+                providerMetrics,
+                concurrencyLimiter,
+                ProviderProperties.ProviderSettings.gameToolsDefaults()
+        );
     }
 
     @Autowired
     public GameToolsServerDiscoveryProvider(
             @Qualifier("gameToolsWebClient") WebClient webClient,
             GameToolsMetrics metrics,
-            ExternalProviderHealthTracker healthTracker
+            ExternalProviderHealthTracker healthTracker,
+            ExternalProviderMetrics providerMetrics,
+            ProviderConcurrencyLimiter concurrencyLimiter,
+            ProviderProperties providerProperties
+    ) {
+        this(
+                webClient,
+                metrics,
+                healthTracker,
+                providerMetrics,
+                concurrencyLimiter,
+                providerProperties.gameTools()
+        );
+    }
+
+    private GameToolsServerDiscoveryProvider(
+            WebClient webClient,
+            GameToolsMetrics metrics,
+            ExternalProviderHealthTracker healthTracker,
+            ExternalProviderMetrics providerMetrics,
+            ProviderConcurrencyLimiter concurrencyLimiter,
+            ProviderProperties.ProviderSettings settings
     ) {
         this.webClient = webClient;
         this.metrics = metrics;
         this.healthTracker = healthTracker;
+        this.providerMetrics = providerMetrics;
+        this.concurrencyLimiter = concurrencyLimiter;
+        this.settings = settings;
     }
 
     @Override
@@ -51,28 +119,24 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
         long startedAt = System.nanoTime();
         String outcome = "other_error";
         try {
-            GameToolsServersResponse response = webClient.get()
-                    .uri(builder -> builder.path("/bf4/servers/")
-                            .queryParam("name", query.text())
-                            .queryParam("limit", query.limit())
-                            .queryParam("lang", "en-us")
-                            .build())
-                    .retrieve()
-                    .bodyToMono(GameToolsServersResponse.class)
-                    .block(REQUEST_TIMEOUT);
-
-            if (response == null) {
-                healthTracker.recordFailure(PROVIDER_ID, "INVALID_RESPONSE");
-                return List.of();
+            acquirePermit();
+            GameToolsServersResponse response;
+            try {
+                response = requestServers(query);
+            } finally {
+                releasePermit();
             }
 
-            if (response.servers() == null) {
-                healthTracker.recordFailure(PROVIDER_ID, "INVALID_RESPONSE");
-                return List.of();
+            if (response == null || response.servers() == null) {
+                throw new ExternalProviderException(
+                        PROVIDER_ID,
+                        ExternalProviderFailureCategory.INVALID_RESPONSE,
+                        false
+                );
             }
 
             List<ServerReference> results = response.servers().stream()
-                    .filter(server -> externalGuid(server) != null && !externalGuid(server).isBlank())
+                    .filter(this::hasExternalGuid)
                     .limit(query.limit())
                     .map(this::toReference)
                     .toList();
@@ -80,41 +144,66 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
             metrics.recordResultCount(results.size());
             outcome = "success";
             return results;
-        } catch (WebClientResponseException exception) {
-            boolean serverError = exception.getStatusCode().is5xxServerError();
-            String category = httpFailureCategory(serverError);
-            log.warn("Falha HTTP no GameTools | status={} | category={}",
-                    exception.getStatusCode().value(), category);
-            healthTracker.recordFailure(PROVIDER_ID, category);
-            outcome = requestOutcome(serverError);
-            throw new ExternalProviderUnavailableException(
-                    "O GameTools está temporariamente indisponível"
+        } catch (ExternalProviderException exception) {
+            healthTracker.recordFailure(PROVIDER_ID, exception.category().name());
+            outcome = ExternalProviderFailureClassifier.outcome(exception.category());
+            if (exception.category() == ExternalProviderFailureCategory.TIMEOUT) {
+                providerMetrics.recordTimeout(PROVIDER_ID);
+            }
+            log.warn(
+                    "Falha no GameTools | category={}",
+                    exception.category()
             );
+            throw exception;
         } catch (RuntimeException exception) {
-            boolean timeout = isTimeout(exception);
-            boolean connectionError = isConnectionError(exception);
-            String category = runtimeFailureCategory(timeout, connectionError);
-            log.warn("Falha ao buscar servidores no GameTools | category={}", category);
-            healthTracker.recordFailure(PROVIDER_ID, category);
-            outcome = runtimeOutcome(timeout);
-            throw new ExternalProviderUnavailableException(
-                    "Não foi possível consultar o GameTools"
+            ExternalProviderException providerException =
+                    ExternalProviderFailureClassifier.classify(PROVIDER_ID, exception);
+            healthTracker.recordFailure(PROVIDER_ID, providerException.category().name());
+            outcome = ExternalProviderFailureClassifier.outcome(providerException.category());
+            if (providerException.category() == ExternalProviderFailureCategory.TIMEOUT) {
+                providerMetrics.recordTimeout(PROVIDER_ID);
+            }
+            log.warn(
+                    "Falha ao buscar servidores no GameTools | category={}",
+                    providerException.category()
             );
+            throw providerException;
         } finally {
-            metrics.recordRequest(outcome, Duration.ofNanos(System.nanoTime() - startedAt));
+            Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
+            metrics.recordRequest(outcome, duration);
+            providerMetrics.recordRequest(PROVIDER_ID, outcome, duration);
         }
     }
 
-    private boolean isTimeout(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof java.util.concurrent.TimeoutException
-                    || current.getClass().getSimpleName().toLowerCase().contains("timeout")) {
-                return true;
-            }
-            current = current.getCause();
+    private GameToolsServersResponse requestServers(ServerSearchQuery query) {
+        try {
+            return webClient.get()
+                    .uri(builder -> builder.path("/bf4/servers/")
+                            .queryParam("name", query.text())
+                            .queryParam("limit", query.limit())
+                            .queryParam("lang", "en-us")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(GameToolsServersResponse.class)
+                    .block(Duration.ofMillis(settings.responseTimeoutMs()));
+        } catch (RuntimeException exception) {
+            throw ExternalProviderFailureClassifier.classify(PROVIDER_ID, exception);
         }
-        return false;
+    }
+
+    private void acquirePermit() {
+        if (concurrencyLimiter == null) {
+            return;
+        }
+        if (!concurrencyLimiter.tryAcquire(PROVIDER_ID)) {
+            throw concurrencyLimiter.concurrencyException(PROVIDER_ID);
+        }
+    }
+
+    private void releasePermit() {
+        if (concurrencyLimiter != null) {
+            concurrencyLimiter.release(PROVIDER_ID);
+        }
     }
 
     private ServerReference toReference(GameToolsServerResponse server) {
@@ -132,55 +221,13 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
     }
 
     private String externalGuid(GameToolsServerResponse server) {
+        if (server == null) {
+            return null;
+        }
         if (server.battlelogId() != null && !server.battlelogId().isBlank()) {
             return server.battlelogId();
         }
         return server.serverId();
-    }
-
-    private String httpFailureCategory(boolean serverError) {
-        if (serverError) {
-            return "HTTP_5XX";
-        }
-        return "HTTP_4XX";
-    }
-
-    private String requestOutcome(boolean serverError) {
-        if (serverError) {
-            return "server_error";
-        }
-        return "client_error";
-    }
-
-    private String runtimeFailureCategory(boolean timeout, boolean connectionError) {
-        if (timeout) {
-            return "TIMEOUT";
-        }
-        if (connectionError) {
-            return "CONNECTION_ERROR";
-        }
-        return "OTHER";
-    }
-
-    private String runtimeOutcome(boolean timeout) {
-        if (timeout) {
-            return "timeout";
-        }
-        return "other_error";
-    }
-
-    private boolean isConnectionError(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof WebClientRequestException
-                    || current instanceof java.net.ConnectException
-                    || current instanceof java.net.UnknownHostException
-                    || current instanceof java.net.SocketException) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     private void put(Map<String, Object> metadata, String key, Object value) {
@@ -192,5 +239,13 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
     @Override
     public String providerId() {
         return PROVIDER_ID;
+    }
+
+    private boolean hasExternalGuid(GameToolsServerResponse server) {
+        if (server == null) {
+            return false;
+        }
+        String guid = externalGuid(server);
+        return guid != null && !guid.isBlank();
     }
 }

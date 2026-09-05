@@ -38,6 +38,45 @@ aceitam mais `X-User-Id` ou `userId` enviado pelo cliente.
 Em produção, defina `SESSION_COOKIE_SECURE=true` quando a aplicação estiver
 atrás de HTTPS.
 
+A aplicação também aplica rate limiting em memória antes dos endpoints de
+autenticação e de busca/configuração de subscriptions. Os limites padrão ficam
+em `lazydeploy.security.rate-limit` no `application.yaml`: login por IP e por
+email normalizado, cadastro por IP, busca por usuário/IP e configuração por
+usuário/IP. O cache possui tamanho máximo e expiração por inatividade; em uma
+implantação com várias instâncias será necessário trocar esse armazenamento por
+um backend compartilhado.
+
+Quando um limite é atingido, a API responde HTTP 429 com `Content-Type:
+application/problem+json` e o header `Retry-After`, sem indicar se o bloqueio
+foi causado pelo IP ou pelo email.
+
+Os limites de negócio ficam em `lazydeploy.limits`: por padrão, cada usuário
+possui até 20 subscriptions, cada alerta até 10 regras e 5 canais, e uma regra
+`MAP_IN` aceita até 20 mapas. Consultas de servidores aceitam entre 2 e 100
+caracteres. O histórico usa páginas de até 100 itens e rejeita páginas acima de
+10.000. Corpos JSON da API são limitados a 1 MiB. Esses valores podem ser
+ajustados no arquivo de configuração sem recompilar a aplicação.
+
+Por padrão, cabeçalhos `X-Forwarded-For` são ignorados. Só habilite
+`lazydeploy.security.rate-limit.proxy.trust-forwarded-headers` quando a
+aplicação estiver atrás de um proxy conhecido e preencha
+`trusted-proxies` com os endereços desse proxy.
+
+As integrações externas usam políticas independentes em
+`lazydeploy.providers`. Cada provider possui timeout de conexão, timeout de
+resposta, limite de chamadas simultâneas e uma política de retry. O GameTools
+não faz retry para manter a busca interativa rápida; o Keeper pode fazer uma
+segunda tentativa apenas em timeout, falha de conexão ou erro 5xx. Quando o
+limite de concorrência do GameTools é atingido, a API responde HTTP 503 com
+`EXTERNAL_PROVIDER_BUSY`; as demais falhas externas usam
+`EXTERNAL_PROVIDER_UNAVAILABLE`.
+
+As métricas agregadas dos providers ficam disponíveis pelo Actuator em
+`lazydeploy.provider.requests`, `lazydeploy.provider.duration`,
+`lazydeploy.provider.timeouts`, `lazydeploy.provider.concurrency_rejections` e
+`lazydeploy.provider.retries`, sempre com tags de provider e resultado de baixa
+cardinalidade.
+
 Como a autenticação utiliza cookies, operações mutáveis exigem token CSRF. Para
 testes manuais, faça primeiro `GET /api/auth/csrf`, envie o cookie recebido e
 repita o valor no header `X-XSRF-TOKEN`.

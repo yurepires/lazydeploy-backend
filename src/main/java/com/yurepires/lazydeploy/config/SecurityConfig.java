@@ -1,8 +1,17 @@
 package com.yurepires.lazydeploy.config;
 
 import com.yurepires.lazydeploy.security.SecurityErrorResponseHandler;
+import com.yurepires.lazydeploy.security.ratelimit.RateLimitFilter;
+import com.yurepires.lazydeploy.security.ratelimit.RateLimitKeyResolver;
+import com.yurepires.lazydeploy.security.ratelimit.RateLimitResponseWriter;
+import com.yurepires.lazydeploy.security.ratelimit.RateLimitService;
+import com.yurepires.lazydeploy.security.request.RequestBodyLimitFilter;
+import com.yurepires.lazydeploy.security.request.RequestBodyLimitResponseWriter;
+import com.yurepires.lazydeploy.service.observability.BusinessLimitMetrics;
+import com.yurepires.lazydeploy.service.observability.SecurityMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -15,15 +24,70 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 
 @Configuration
 public class SecurityConfig {
+
+    @Bean
+    public RateLimitFilter rateLimitFilter(
+            RateLimitProperties properties,
+            RateLimitService rateLimitService,
+            RateLimitKeyResolver keyResolver,
+            SecurityMetrics securityMetrics,
+            RateLimitResponseWriter responseWriter,
+            ObjectMapper objectMapper
+    ) {
+        return new RateLimitFilter(
+                properties,
+                rateLimitService,
+                keyResolver,
+                securityMetrics,
+                responseWriter,
+                objectMapper
+        );
+    }
+
+    /**
+     * O filtro é inserido na cadeia do Spring Security, depois do contexto e
+     * da autenticação anônima. A desativação do registro servlet evita uma
+     * segunda execução fora da cadeia de segurança.
+     */
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(
+            RateLimitFilter rateLimitFilter
+    ) {
+        FilterRegistrationBean<RateLimitFilter> registration =
+                new FilterRegistrationBean<>(rateLimitFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public RequestBodyLimitFilter requestBodyLimitFilter(
+            BusinessLimitProperties properties,
+            BusinessLimitMetrics metrics,
+            RequestBodyLimitResponseWriter responseWriter
+    ) {
+        return new RequestBodyLimitFilter(properties, metrics, responseWriter);
+    }
+
+    @Bean
+    public FilterRegistrationBean<RequestBodyLimitFilter> requestBodyLimitFilterRegistration(
+            RequestBodyLimitFilter requestBodyLimitFilter
+    ) {
+        FilterRegistrationBean<RequestBodyLimitFilter> registration =
+                new FilterRegistrationBean<>(requestBodyLimitFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -46,7 +110,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             SecurityContextRepository securityContextRepository,
-            SecurityErrorResponseHandler securityErrorResponseHandler
+            SecurityErrorResponseHandler securityErrorResponseHandler,
+            RateLimitFilter rateLimitFilter,
+            RequestBodyLimitFilter requestBodyLimitFilter
     ) throws Exception {
         http
                 .csrf(csrf -> csrf
@@ -97,7 +163,9 @@ public class SecurityConfig {
                 .exceptionHandling(exceptionHandling -> exceptionHandling
                         .authenticationEntryPoint(securityErrorResponseHandler)
                         .accessDeniedHandler(securityErrorResponseHandler)
-                );
+                )
+                .addFilterAfter(rateLimitFilter, AnonymousAuthenticationFilter.class)
+                .addFilterBefore(requestBodyLimitFilter, RateLimitFilter.class);
 
         return http.build();
     }

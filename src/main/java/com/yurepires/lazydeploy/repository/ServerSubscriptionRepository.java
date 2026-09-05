@@ -13,6 +13,8 @@ public interface ServerSubscriptionRepository extends JpaRepository<ServerSubscr
 
     List<ServerSubscriptionEntity> findAllByUserId(UUID userId);
 
+    long countByUserId(UUID userId);
+
     Optional<ServerSubscriptionEntity> findByIdAndUserId(UUID id, UUID userId);
 
     Optional<ServerSubscriptionEntity> findByUserIdAndServerId(UUID userId, UUID serverId);

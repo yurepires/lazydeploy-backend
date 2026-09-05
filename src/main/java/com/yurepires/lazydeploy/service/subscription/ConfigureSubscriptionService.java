@@ -21,6 +21,7 @@ import com.yurepires.lazydeploy.model.persistence.ServerSubscription;
 import com.yurepires.lazydeploy.security.CurrentUserProvider;
 import com.yurepires.lazydeploy.service.observability.SubscriptionConfigurationMetrics;
 import com.yurepires.lazydeploy.service.validation.channel.ChannelConfigurationValidatorRegistry;
+import com.yurepires.lazydeploy.service.validation.BusinessLimitService;
 import com.yurepires.lazydeploy.service.validation.rule.RuleDefinitionValidatorRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +53,7 @@ public class ConfigureSubscriptionService {
     private final SubscriptionApplicationService subscriptionService;
     private final RuleDefinitionValidatorRegistry ruleValidatorRegistry;
     private final ChannelConfigurationValidatorRegistry channelValidatorRegistry;
+    private final BusinessLimitService businessLimitService;
     private final SubscriptionConfigurationMetrics metrics;
     private final Clock clock;
     // Mantém operações concorrentes do mesmo GUID serializadas nesta instância.
@@ -62,6 +64,7 @@ public class ConfigureSubscriptionService {
             SubscriptionApplicationService subscriptionService,
             RuleDefinitionValidatorRegistry ruleValidatorRegistry,
             ChannelConfigurationValidatorRegistry channelValidatorRegistry,
+            BusinessLimitService businessLimitService,
             SubscriptionConfigurationMetrics metrics,
             Clock clock
     ) {
@@ -69,6 +72,7 @@ public class ConfigureSubscriptionService {
         this.subscriptionService = subscriptionService;
         this.ruleValidatorRegistry = ruleValidatorRegistry;
         this.channelValidatorRegistry = channelValidatorRegistry;
+        this.businessLimitService = businessLimitService;
         this.metrics = metrics;
         this.clock = clock;
     }
@@ -144,6 +148,9 @@ public class ConfigureSubscriptionService {
             );
         }
 
+        businessLimitService.validateRuleCollectionSize(request.rules().size());
+        businessLimitService.validateChannelCollectionSize(request.channels().size());
+
         validateRules(request.rules());
         validateChannels(request.channels());
 
@@ -164,6 +171,8 @@ public class ConfigureSubscriptionService {
             }
 
             String normalizedType = ruleValidatorRegistry.normalizeType(rule.type());
+
+            ruleValidatorRegistry.validate(normalizedType, rule.parameters());
 
             if (!ruleTypes.add(normalizedType)) {
                 throw new DuplicateRuleTypeException(normalizedType);

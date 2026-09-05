@@ -24,6 +24,7 @@ public class GameToolsMetrics {
             "timeout",
             "client_error",
             "server_error",
+            "invalid_response",
             "other_error"
     );
 

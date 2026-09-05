@@ -2,13 +2,14 @@ package com.yurepires.lazydeploy.dto.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.Locale;
 
 public record SubscriptionCreationRequest(
         @NotBlank String serverGuid,
-        String displayName,
+        @Size(max = 255) String displayName,
         List<@Valid NotificationRuleRequest> rules,
         List<@Valid NotificationChannelRequest> channels,
         Boolean enabled

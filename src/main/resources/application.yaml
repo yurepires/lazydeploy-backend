@@ -66,6 +66,78 @@ lazydeploy:
   game-tools-base-url: https://api.gametools.network
   battlelog-keeper-base-url: https://keeper.battlelog.com
   email-from: ${MAIL_FROM:${MAIL_USERNAME:}}
+  providers:
+    game-tools:
+      connect-timeout-ms: 2000
+      response-timeout-ms: 5000
+      max-concurrent-requests: 10
+      max-response-body-bytes: 2097152
+      retry:
+        enabled: false
+        max-attempts: 1
+        backoff-ms: 0
+    keeper:
+      connect-timeout-ms: 2000
+      response-timeout-ms: 4000
+      max-concurrent-requests: 20
+      max-response-body-bytes: 2097152
+      retry:
+        enabled: true
+        max-attempts: 2
+        backoff-ms: 250
+    bflist:
+      connect-timeout-ms: 2000
+      response-timeout-ms: 5000
+      max-concurrent-requests: 5
+      max-response-body-bytes: 2097152
+      retry:
+        enabled: false
+        max-attempts: 1
+        backoff-ms: 0
+  limits:
+    subscriptions-per-user: 20
+    rules-per-subscription: 10
+    channels-per-subscription: 5
+    maps-per-map-in-rule: 20
+    server-search-query-min-length: 2
+    server-search-query-max-length: 100
+    default-page-size: 20
+    max-page-size: 100
+    max-page-number: 10000
+    max-request-body-bytes: 1048576
+  security:
+    rate-limit:
+      enabled: true
+      login:
+        ip:
+          capacity: 10
+          window: 60s
+        identity:
+          capacity: 5
+          window: 5m
+      register:
+        capacity: 5
+        window: 10m
+      server-search:
+        user:
+          capacity: 30
+          window: 60s
+        ip:
+          capacity: 60
+          window: 60s
+      subscription-configure:
+        user:
+          capacity: 10
+          window: 10m
+        ip:
+          capacity: 20
+          window: 10m
+      cache:
+        maximum-size: 10000
+        expire-after-access: 30m
+      proxy:
+        trust-forwarded-headers: false
+        trusted-proxies: []
   monitoring:
     interval: 30s
     round-reset-threshold-seconds: 30

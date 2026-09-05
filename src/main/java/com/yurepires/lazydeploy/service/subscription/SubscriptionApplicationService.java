@@ -10,6 +10,7 @@ import com.yurepires.lazydeploy.dto.request.PatchRuleRequest;
 import com.yurepires.lazydeploy.dto.request.SubscriptionCreationRequest;
 import com.yurepires.lazydeploy.dto.request.UpdateChannelRequest;
 import com.yurepires.lazydeploy.dto.request.UpdateRuleRequest;
+import com.yurepires.lazydeploy.entity.UserEntity;
 import com.yurepires.lazydeploy.exception.ChannelAlreadyExistsException;
 import com.yurepires.lazydeploy.exception.InvalidChannelConfigurationException;
 import com.yurepires.lazydeploy.exception.InvalidRequestException;
@@ -30,9 +31,11 @@ import com.yurepires.lazydeploy.repository.ServerRepository;
 import com.yurepires.lazydeploy.repository.ServerIdentifierRepository;
 import com.yurepires.lazydeploy.repository.UserRepository;
 import com.yurepires.lazydeploy.service.validation.channel.ChannelConfigurationValidatorRegistry;
+import com.yurepires.lazydeploy.service.validation.BusinessLimitService;
 import com.yurepires.lazydeploy.service.validation.rule.RuleDefinitionValidatorRegistry;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -43,6 +46,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SubscriptionApplicationService {
@@ -57,6 +61,8 @@ public class SubscriptionApplicationService {
     private final Clock clock;
     private final RuleDefinitionValidatorRegistry ruleValidatorRegistry;
     private final ChannelConfigurationValidatorRegistry channelValidatorRegistry;
+    private final BusinessLimitService businessLimitService;
+    private final ConcurrentHashMap<UUID, Object> subscriptionLocks = new ConcurrentHashMap<>();
 
     public SubscriptionApplicationService(
             UserRepository userRepository,
@@ -68,7 +74,8 @@ public class SubscriptionApplicationService {
             ServerMapper serverMapper,
             Clock clock,
             RuleDefinitionValidatorRegistry ruleValidatorRegistry,
-            ChannelConfigurationValidatorRegistry channelValidatorRegistry
+            ChannelConfigurationValidatorRegistry channelValidatorRegistry,
+            BusinessLimitService businessLimitService
     ) {
         this.userRepository = userRepository;
         this.serverRepository = serverRepository;
@@ -80,9 +87,14 @@ public class SubscriptionApplicationService {
         this.clock = clock;
         this.ruleValidatorRegistry = ruleValidatorRegistry;
         this.channelValidatorRegistry = channelValidatorRegistry;
+        this.businessLimitService = businessLimitService;
     }
 
+    @Transactional
     public ServerSubscription create(UUID userId, SubscriptionCreationRequest request) {
+        businessLimitService.validateRuleCollectionSize(request.rules().size());
+        businessLimitService.validateChannelCollectionSize(request.channels().size());
+
         List<NotificationRuleDefinition> rules = createRuleDefinitions(request.rules());
         List<NotificationChannelConfiguration> channels = createChannelConfigurations(
                 request.channels()
@@ -116,23 +128,30 @@ public class SubscriptionApplicationService {
         return subscriptionPersistenceService.save(configuredSubscription);
     }
 
+    @Transactional
     public ServerSubscription create(UUID userId, CreateSubscriptionRequest request) {
-        User user = findEnabledUser(userId);
-        Server server = resolveServer(request.serverGuid(), request.displayName());
+        User user = findEnabledUserForCreation(userId);
+        Object userLock = subscriptionLocks.computeIfAbsent(user.id(), ignored -> new Object());
 
-        boolean subscriptionAlreadyExists = subscriptionPersistenceService
-                .existsByUserIdAndServerId(user.id(), server.id());
+        synchronized (userLock) {
+            businessLimitService.ensureSubscriptionCapacity(user.id());
 
-        if (subscriptionAlreadyExists) {
-            throw new SubscriptionAlreadyExistsException();
-        }
+            Server server = resolveServer(request.serverGuid(), request.displayName());
 
-        ServerSubscription subscription = createSubscription(user, server, request);
+            boolean subscriptionAlreadyExists = subscriptionPersistenceService
+                    .existsByUserIdAndServerId(user.id(), server.id());
 
-        try {
-            return subscriptionPersistenceService.save(subscription);
-        } catch (DataIntegrityViolationException concurrentCreationException) {
-            throw new SubscriptionAlreadyExistsException();
+            if (subscriptionAlreadyExists) {
+                throw new SubscriptionAlreadyExistsException();
+            }
+
+            ServerSubscription subscription = createSubscription(user, server, request);
+
+            try {
+                return subscriptionPersistenceService.save(subscription);
+            } catch (DataIntegrityViolationException concurrentCreationException) {
+                throw new SubscriptionAlreadyExistsException();
+            }
         }
     }
 
@@ -224,6 +243,7 @@ public class SubscriptionApplicationService {
             CreateRuleRequest request
     ) {
         ServerSubscription currentSubscription = get(userId, subscriptionId);
+        businessLimitService.ensureRuleCapacity(currentSubscription.rules().size());
         List<NotificationRuleDefinition> updatedRules = new ArrayList<>(currentSubscription.rules());
         updatedRules.add(createRuleDefinition(
                 ruleId,
@@ -382,6 +402,7 @@ public class SubscriptionApplicationService {
             CreateChannelRequest request
     ) {
         ServerSubscription currentSubscription = get(userId, subscriptionId);
+        businessLimitService.ensureChannelCapacity(currentSubscription.channels().size());
         String normalizedType = channelValidatorRegistry.normalizeType(request.type());
         rejectRootRecipient(normalizedType, request.recipient());
         channelValidatorRegistry.validate(normalizedType, request.parameters());
@@ -578,12 +599,22 @@ public class SubscriptionApplicationService {
                 .orElseThrow(NotificationChannelNotFoundException::new);
     }
 
-    private User findEnabledUser(UUID userId) {
-        return userRepository
-                .findById(userId)
+    private User findEnabledUserForCreation(UUID userId) {
+        return findUserEntityForCreation(userId)
                 .map(userMapper::toDomain)
                 .filter(User::enabled)
                 .orElseThrow(UserNotFoundException::new);
+    }
+
+    private Optional<UserEntity> findUserEntityForCreation(UUID userId) {
+        Optional<UserEntity> lockedUser = userRepository.findLockedById(userId);
+        if (lockedUser.isPresent()) {
+            return lockedUser;
+        }
+
+        // O fallback preserva a compatibilidade com implementações/testes que
+        // ainda oferecem somente a consulta convencional por id.
+        return userRepository.findById(userId);
     }
 
     private ServerSubscription createSubscription(

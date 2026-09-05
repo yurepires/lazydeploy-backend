@@ -8,6 +8,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -112,7 +113,11 @@ public class RestExceptionHandler {
             UnknownMapException.class,
             DuplicateRuleTypeException.class,
             DuplicateChannelTypeException.class,
-            NoActiveNotificationChannelException.class
+            NoActiveNotificationChannelException.class,
+            SubscriptionLimitReachedException.class,
+            RuleLimitReachedException.class,
+            ChannelLimitReachedException.class,
+            TooManyMapsException.class
     })
     public ResponseEntity<ProblemDetail> handleUnprocessableEntity(
             Exception exception,
@@ -154,6 +159,26 @@ public class RestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleRateLimitExceeded(
+            RateLimitExceededException exception,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetailFactory.create(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "Too Many Requests",
+                exception.getMessage(),
+                exception.getErrorCode(),
+                request.getRequestURI(),
+                List.of()
+        );
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", String.valueOf(exception.getRetryAfterSeconds()));
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .headers(headers)
+                .body(problemDetail);
+    }
+
     @ExceptionHandler(ExternalProviderUnavailableException.class)
     public ResponseEntity<ProblemDetail> handleProviderUnavailable(
             ExternalProviderUnavailableException exception,
@@ -168,6 +193,33 @@ public class RestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ExternalProviderException.class)
+    public ResponseEntity<ProblemDetail> handleProviderFailure(
+            ExternalProviderException exception,
+            HttpServletRequest request
+    ) {
+        boolean concurrencyLimitReached =
+                exception.category() == ExternalProviderFailureCategory.CONCURRENCY_LIMIT_REACHED;
+
+        if (concurrencyLimitReached) {
+            return response(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "External provider busy",
+                    "A busca de servidores está temporariamente ocupada. Tente novamente.",
+                    "EXTERNAL_PROVIDER_BUSY",
+                    request
+            );
+        }
+
+        return response(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "External provider unavailable",
+                "Não foi possível consultar os servidores agora. Tente novamente.",
+                "EXTERNAL_PROVIDER_UNAVAILABLE",
+                request
+        );
+    }
+
     @ExceptionHandler(InvalidRequestException.class)
     public ResponseEntity<ProblemDetail> handleInvalidRequest(
             InvalidRequestException exception,
@@ -178,6 +230,40 @@ public class RestExceptionHandler {
                 "Invalid request",
                 exception.getMessage(),
                 exception.getErrorCode(),
+                request
+        );
+    }
+
+    @ExceptionHandler({
+            SearchQueryTooShortException.class,
+            SearchQueryTooLongException.class,
+            InvalidPageException.class,
+            InvalidPageSizeException.class,
+            PageSizeLimitExceededException.class
+    })
+    public ResponseEntity<ProblemDetail> handleLimitValidation(
+            ApplicationException exception,
+            HttpServletRequest request
+    ) {
+        return response(
+                HttpStatus.BAD_REQUEST,
+                "Request validation failed",
+                exception.getMessage(),
+                exception.getErrorCode(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RequestTooLargeException.class)
+    public ResponseEntity<ProblemDetail> handleRequestTooLarge(
+            RequestTooLargeException exception,
+            HttpServletRequest request
+    ) {
+        return response(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "Payload Too Large",
+                "O corpo da requisição excede o tamanho máximo permitido.",
+                "REQUEST_TOO_LARGE",
                 request
         );
     }

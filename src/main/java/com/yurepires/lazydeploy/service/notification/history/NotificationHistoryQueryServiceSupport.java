@@ -3,11 +3,12 @@ package com.yurepires.lazydeploy.service.notification.history;
 import com.yurepires.lazydeploy.exception.InvalidDateRangeException;
 import com.yurepires.lazydeploy.exception.InvalidNotificationStatusException;
 import com.yurepires.lazydeploy.exception.InvalidPaginationException;
+import com.yurepires.lazydeploy.service.validation.PageRequestPolicy;
 import com.yurepires.lazydeploy.model.notification.NotificationDeliveryStatus;
 import com.yurepires.lazydeploy.model.notification.NotificationHistoryFilter;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -28,6 +29,17 @@ public class NotificationHistoryQueryServiceSupport {
             "channelType",
             "channel"
     );
+
+    private final PageRequestPolicy pageRequestPolicy;
+
+    @Autowired
+    public NotificationHistoryQueryServiceSupport(PageRequestPolicy pageRequestPolicy) {
+        this.pageRequestPolicy = pageRequestPolicy;
+    }
+
+    public NotificationHistoryQueryServiceSupport() {
+        this.pageRequestPolicy = new PageRequestPolicy();
+    }
 
     public NotificationHistoryFilter createFilter(
             UUID subscriptionId,
@@ -55,20 +67,14 @@ public class NotificationHistoryQueryServiceSupport {
     }
 
     public Pageable normalizePageable(Pageable pageable) {
-        int page = 0;
-        int requestedSize = DEFAULT_PAGE_SIZE;
-        if (pageable != null) {
-            page = pageable.getPageNumber();
-            requestedSize = pageable.getPageSize();
-        }
-        if (page < 0) {
-            throw new InvalidPaginationException("O número da página não pode ser negativo");
-        }
-        if (requestedSize <= 0) {
-            throw new InvalidPaginationException("O tamanho da página deve ser positivo");
-        }
+        return normalizePageable(pageable, null, null);
+    }
 
-        int pageSize = Math.min(requestedSize, MAXIMUM_PAGE_SIZE);
+    public Pageable normalizePageable(
+            Pageable pageable,
+            Integer requestedPage,
+            Integer requestedSize
+    ) {
         Sort sort = Sort.unsorted();
         if (pageable != null) {
             sort = pageable.getSort();
@@ -78,7 +84,12 @@ public class NotificationHistoryQueryServiceSupport {
             sort = Sort.by(Sort.Direction.DESC, "attemptedAt");
         }
 
-        return PageRequest.of(page, pageSize, sort);
+        return pageRequestPolicy.apply(
+                pageable,
+                sort,
+                requestedPage,
+                requestedSize
+        );
     }
 
     public NotificationHistoryFilter validateFilter(NotificationHistoryFilter filter) {

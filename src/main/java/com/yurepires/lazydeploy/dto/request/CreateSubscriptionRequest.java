@@ -1,12 +1,13 @@
 package com.yurepires.lazydeploy.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.util.Locale;
 
 public record CreateSubscriptionRequest(
         @NotBlank String serverGuid,
-        String displayName,
+        @Size(max = 255) String displayName,
         Boolean enabled
 ) {
 

@@ -64,6 +64,9 @@ public class KeeperMetrics {
         }
 
         String normalizedOutcome = outcome.trim().toLowerCase(Locale.ROOT);
+        if (normalizedOutcome.equals("invalid_response")) {
+            return "invalid_snapshot";
+        }
         if (OUTCOMES.contains(normalizedOutcome)) {
             return normalizedOutcome;
         }

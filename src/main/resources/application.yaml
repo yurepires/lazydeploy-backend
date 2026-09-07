@@ -21,8 +21,22 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:5000}
+      mail.smtp.timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:5000}
+      mail.smtp.writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:5000}
+
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
 
 server:
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: ${SERVER_TOMCAT_THREADS_MAX:50}
+      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:5}
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:200}
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
+    connection-timeout: ${SERVER_TOMCAT_CONNECTION_TIMEOUT:5s}
   servlet:
     session:
       cookie:
@@ -142,3 +156,23 @@ lazydeploy:
     interval: 30s
     round-reset-threshold-seconds: 30
     max-observation-gap: 5m
+  resources:
+    database:
+      maximum-pool-size: ${DATABASE_MAX_POOL_SIZE:10}
+      minimum-idle: ${DATABASE_MINIMUM_IDLE:2}
+      connection-timeout-ms: ${DATABASE_CONNECTION_TIMEOUT_MS:3000}
+      idle-timeout-ms: ${DATABASE_IDLE_TIMEOUT_MS:600000}
+      max-lifetime-ms: ${DATABASE_MAX_LIFETIME_MS:1800000}
+    monitoring-executor:
+      core-pool-size: ${MONITORING_EXECUTOR_CORE_POOL_SIZE:4}
+      max-pool-size: ${MONITORING_EXECUTOR_MAX_POOL_SIZE:8}
+      queue-capacity: ${MONITORING_EXECUTOR_QUEUE_CAPACITY:100}
+      keep-alive-seconds: ${MONITORING_EXECUTOR_KEEP_ALIVE_SECONDS:60}
+    http:
+      max-threads: ${SERVER_TOMCAT_THREADS_MAX:50}
+      min-spare-threads: ${SERVER_TOMCAT_THREADS_MIN_SPARE:5}
+      max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:200}
+      accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
+      connection-timeout: ${SERVER_TOMCAT_CONNECTION_TIMEOUT:5s}
+    shutdown:
+      timeout: ${SHUTDOWN_TIMEOUT:20s}

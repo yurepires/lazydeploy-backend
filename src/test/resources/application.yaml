@@ -9,6 +9,8 @@ spring:
     hibernate:
       ddl-auto: create-drop
     open-in-view: false
+  lifecycle:
+    timeout-per-shutdown-phase: 5s
 
 management:
   endpoints:
@@ -41,6 +43,16 @@ info:
   app:
     name: LazyDeploy
     version: "test"
+
+server:
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 10
+      min-spare: 2
+    max-connections: 50
+    accept-count: 20
+    connection-timeout: 5s
 
 lazydeploy:
   game-tools-base-url: https://api.gametools.network
@@ -122,3 +134,23 @@ lazydeploy:
     interval: 30s
     round-reset-threshold-seconds: 30
     max-observation-gap: 5m
+  resources:
+    database:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout-ms: 1000
+      idle-timeout-ms: 60000
+      max-lifetime-ms: 300000
+    monitoring-executor:
+      core-pool-size: 2
+      max-pool-size: 4
+      queue-capacity: 10
+      keep-alive-seconds: 30
+    http:
+      max-threads: 10
+      min-spare-threads: 2
+      max-connections: 50
+      accept-count: 20
+      connection-timeout: 5s
+    shutdown:
+      timeout: 5s

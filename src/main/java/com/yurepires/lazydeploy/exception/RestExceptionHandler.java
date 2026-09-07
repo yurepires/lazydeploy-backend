@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ProblemDetail;
@@ -20,8 +23,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.hibernate.exception.JDBCConnectionException;
 
 import java.util.List;
+import java.sql.SQLTransientConnectionException;
 
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -101,6 +106,31 @@ public class RestExceptionHandler {
                 "Resource conflict",
                 detail,
                 errorCode,
+                request
+        );
+    }
+
+    @ExceptionHandler({
+            CannotGetJdbcConnectionException.class,
+            DataAccessResourceFailureException.class,
+            QueryTimeoutException.class,
+            JDBCConnectionException.class,
+            SQLTransientConnectionException.class
+    })
+    public ResponseEntity<ProblemDetail> handleDatabaseUnavailable(
+            Exception exception,
+            HttpServletRequest request
+    ) {
+        log.warn(
+                "Banco temporariamente indisponível ao processar {} | exceptionType={}",
+                request.getRequestURI(),
+                exception.getClass().getSimpleName()
+        );
+        return response(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Database temporarily unavailable",
+                "Não foi possível acessar o banco de dados agora. Tente novamente.",
+                "DATABASE_TEMPORARILY_UNAVAILABLE",
                 request
         );
     }

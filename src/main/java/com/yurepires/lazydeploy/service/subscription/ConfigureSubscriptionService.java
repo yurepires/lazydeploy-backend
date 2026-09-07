@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Cria uma subscription e toda a sua configuração em uma única transação.
@@ -56,8 +55,10 @@ public class ConfigureSubscriptionService {
     private final BusinessLimitService businessLimitService;
     private final SubscriptionConfigurationMetrics metrics;
     private final Clock clock;
-    // Mantém operações concorrentes do mesmo GUID serializadas nesta instância.
-    private final ConcurrentHashMap<String, Object> serverLocks = new ConcurrentHashMap<>();
+    // Stripes fixas evitam que uma entrada de lock seja criada para cada GUID
+    // recebido e permaneça na memória indefinidamente.
+    private static final int SERVER_LOCK_STRIPES = 64;
+    private final Object[] serverLocks = createLocks(SERVER_LOCK_STRIPES);
 
     public ConfigureSubscriptionService(
             CurrentUserProvider currentUserProvider,
@@ -89,10 +90,7 @@ public class ConfigureSubscriptionService {
 
             UUID currentUserId = currentUserProvider.getCurrentUserId();
             String normalizedGuid = normalizeGuid(request.serverGuid());
-            Object serverLock = serverLocks.computeIfAbsent(
-                    normalizedGuid,
-                    ignored -> new Object()
-            );
+            Object serverLock = lockFor(normalizedGuid);
 
             ServerSubscription subscription;
             synchronized (serverLock) {
@@ -158,6 +156,19 @@ public class ConfigureSubscriptionService {
                 && !hasActiveChannel(request.channels())) {
             throw new NoActiveNotificationChannelException();
         }
+    }
+
+    private Object lockFor(String normalizedGuid) {
+        int index = Math.floorMod(normalizedGuid.hashCode(), serverLocks.length);
+        return serverLocks[index];
+    }
+
+    private static Object[] createLocks(int lockCount) {
+        Object[] locks = new Object[lockCount];
+        for (int index = 0; index < lockCount; index++) {
+            locks[index] = new Object();
+        }
+        return locks;
     }
 
     private void validateRules(List<ConfigureRuleRequest> rules) {

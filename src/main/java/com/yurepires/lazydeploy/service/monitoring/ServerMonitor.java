@@ -9,11 +9,14 @@ import com.yurepires.lazydeploy.service.notification.NotificationOrchestrator;
 import com.yurepires.lazydeploy.service.observability.MonitoringCycleContext;
 import com.yurepires.lazydeploy.service.observability.MonitoringMetrics;
 import com.yurepires.lazydeploy.service.subscription.ServerSubscriptionPersistenceService;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -22,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Component
@@ -35,6 +40,9 @@ public class ServerMonitor {
     private final NotificationOrchestrator notificationOrchestrator;
     private final ServerSnapshotEnricher snapshotEnricher;
     private final MonitoringMetrics metrics;
+    private final TaskExecutor monitoringExecutor;
+    private final AtomicBoolean cycleInProgress = new AtomicBoolean();
+    private final AtomicBoolean shuttingDown = new AtomicBoolean();
 
     public ServerMonitor(
             ServerSnapshotProvider snapshotProvider,
@@ -48,7 +56,8 @@ public class ServerMonitor {
                 monitoringStateService,
                 notificationOrchestrator,
                 new ServerSnapshotEnricher(),
-                MonitoringMetrics.noop()
+                MonitoringMetrics.noop(),
+                null
         );
     }
 
@@ -65,7 +74,27 @@ public class ServerMonitor {
                 monitoringStateService,
                 notificationOrchestrator,
                 snapshotEnricher,
-                MonitoringMetrics.noop()
+                MonitoringMetrics.noop(),
+                null
+        );
+    }
+
+    public ServerMonitor(
+            ServerSnapshotProvider snapshotProvider,
+            ServerSubscriptionPersistenceService subscriptionPersistenceService,
+            MonitoringStateService monitoringStateService,
+            NotificationOrchestrator notificationOrchestrator,
+            ServerSnapshotEnricher snapshotEnricher,
+            MonitoringMetrics metrics
+    ) {
+        this(
+                snapshotProvider,
+                subscriptionPersistenceService,
+                monitoringStateService,
+                notificationOrchestrator,
+                snapshotEnricher,
+                metrics,
+                null
         );
     }
 
@@ -76,7 +105,8 @@ public class ServerMonitor {
             MonitoringStateService monitoringStateService,
             NotificationOrchestrator notificationOrchestrator,
             ServerSnapshotEnricher snapshotEnricher,
-            MonitoringMetrics metrics
+            MonitoringMetrics metrics,
+            @Qualifier("monitoringTaskExecutor") TaskExecutor monitoringExecutor
     ) {
         this.snapshotProvider = snapshotProvider;
         this.subscriptionPersistenceService = subscriptionPersistenceService;
@@ -84,10 +114,55 @@ public class ServerMonitor {
         this.notificationOrchestrator = notificationOrchestrator;
         this.snapshotEnricher = snapshotEnricher;
         this.metrics = metrics;
+        this.monitoringExecutor = monitoringExecutor;
     }
 
     @Scheduled(fixedDelayString = "${lazydeploy.monitoring.interval}")
     public void monitor() {
+        if (shuttingDown.get()) {
+            metrics.recordCycleSkipped();
+            log.debug("MONITORING CYCLE SKIPPED | reason=SHUTDOWN");
+            return;
+        }
+
+        if (!cycleInProgress.compareAndSet(false, true)) {
+            metrics.recordCycleSkipped();
+            log.warn(
+                    "MONITORING CYCLE SKIPPED | reason=PREVIOUS_CYCLE_STILL_RUNNING"
+            );
+            return;
+        }
+
+        if (monitoringExecutor == null) {
+            runMonitoringCycleAndReleaseGuard();
+            return;
+        }
+
+        try {
+            monitoringExecutor.execute(this::runMonitoringCycleAndReleaseGuard);
+        } catch (RejectedExecutionException exception) {
+            cycleInProgress.set(false);
+            metrics.recordCycleSkipped();
+            log.warn(
+                    "MONITORING CYCLE SKIPPED | reason=EXECUTOR_REJECTED"
+            );
+        }
+    }
+
+    @PreDestroy
+    public void stopSchedulingNewCycles() {
+        shuttingDown.set(true);
+    }
+
+    private void runMonitoringCycleAndReleaseGuard() {
+        try {
+            runMonitoringCycle();
+        } finally {
+            cycleInProgress.set(false);
+        }
+    }
+
+    private void runMonitoringCycle() {
         MonitoringCycleContext cycleContext = MonitoringCycleContext.start();
         long startedAt = System.nanoTime();
         String cycleStatus = "success";

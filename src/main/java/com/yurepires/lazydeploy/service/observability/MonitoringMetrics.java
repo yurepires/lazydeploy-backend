@@ -24,6 +24,7 @@ public class MonitoringMetrics {
     private static final String CYCLE_COUNTER = "lazydeploy.monitoring.cycles";
     private static final String CYCLE_DURATION = "lazydeploy.monitoring.cycle.duration";
     private static final String SERVERS_COUNTER = "lazydeploy.monitoring.servers.processed";
+    public static final String SKIPPED_CYCLES = "lazydeploy.monitoring.cycles.skipped";
     private static final String ACTIVE_SERVERS = "lazydeploy.monitoring.active_servers";
     private static final String ACTIVE_SUBSCRIPTIONS = "lazydeploy.monitoring.active_subscriptions";
 
@@ -74,6 +75,24 @@ public class MonitoringMetrics {
             Counter.builder(SERVERS_COUNTER)
                     .tag("status", normalizedStatus)
                     .description("Quantidade de servers processados no monitoramento")
+                    .register(meterRegistry)
+                    .increment();
+        } catch (RuntimeException ignored) {
+            // A observabilidade nunca deve interromper o monitoramento.
+        }
+    }
+
+    public void recordCycleSkipped() {
+        if (meterRegistry == null) {
+            return;
+        }
+
+        try {
+            Counter.builder(SKIPPED_CYCLES)
+                    .description(
+                            "Ciclos de monitoramento ignorados por execução concorrente "
+                                    + "ou saturação"
+                    )
                     .register(meterRegistry)
                     .increment();
         } catch (RuntimeException ignored) {

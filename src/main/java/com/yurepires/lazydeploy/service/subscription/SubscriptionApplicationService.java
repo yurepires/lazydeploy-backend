@@ -46,7 +46,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SubscriptionApplicationService {
@@ -62,7 +61,10 @@ public class SubscriptionApplicationService {
     private final RuleDefinitionValidatorRegistry ruleValidatorRegistry;
     private final ChannelConfigurationValidatorRegistry channelValidatorRegistry;
     private final BusinessLimitService businessLimitService;
-    private final ConcurrentHashMap<UUID, Object> subscriptionLocks = new ConcurrentHashMap<>();
+    // Stripes fixas mantêm a serialização por usuário sem crescimento ilimitado
+    // de objetos de lock quando IDs novos são recebidos.
+    private static final int USER_LOCK_STRIPES = 64;
+    private final Object[] subscriptionLocks = createLocks(USER_LOCK_STRIPES);
 
     public SubscriptionApplicationService(
             UserRepository userRepository,
@@ -131,7 +133,7 @@ public class SubscriptionApplicationService {
     @Transactional
     public ServerSubscription create(UUID userId, CreateSubscriptionRequest request) {
         User user = findEnabledUserForCreation(userId);
-        Object userLock = subscriptionLocks.computeIfAbsent(user.id(), ignored -> new Object());
+        Object userLock = lockFor(user.id());
 
         synchronized (userLock) {
             businessLimitService.ensureSubscriptionCapacity(user.id());
@@ -157,6 +159,19 @@ public class SubscriptionApplicationService {
 
     public List<ServerSubscription> list(UUID userId) {
         return subscriptionPersistenceService.findAllByUserId(userId);
+    }
+
+    private Object lockFor(UUID userId) {
+        int index = Math.floorMod(userId.hashCode(), subscriptionLocks.length);
+        return subscriptionLocks[index];
+    }
+
+    private static Object[] createLocks(int lockCount) {
+        Object[] locks = new Object[lockCount];
+        for (int index = 0; index < lockCount; index++) {
+            locks[index] = new Object();
+        }
+        return locks;
     }
 
     public ServerSubscription get(UUID userId, UUID subscriptionId) {

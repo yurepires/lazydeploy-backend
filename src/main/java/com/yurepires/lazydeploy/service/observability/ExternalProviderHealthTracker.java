@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -17,6 +18,13 @@ import java.util.concurrent.ConcurrentMap;
  */
 @Component
 public class ExternalProviderHealthTracker {
+
+    private static final Set<String> KNOWN_PROVIDERS = Set.of(
+            "GAMETOOLS",
+            "BATTLELOG_KEEPER",
+            "KEEPER",
+            "BFLIST"
+    );
 
     private final Clock clock;
     private final ConcurrentMap<String, ProviderState> states = new ConcurrentHashMap<>();
@@ -80,7 +88,11 @@ public class ExternalProviderHealthTracker {
         if (providerId == null || providerId.isBlank()) {
             return "UNKNOWN";
         }
-        return providerId.trim().toUpperCase(Locale.ROOT);
+        String normalizedProviderId = providerId.trim().toUpperCase(Locale.ROOT);
+        if (KNOWN_PROVIDERS.contains(normalizedProviderId)) {
+            return normalizedProviderId;
+        }
+        return "UNKNOWN";
     }
 
     private String normalizeCategory(String category) {

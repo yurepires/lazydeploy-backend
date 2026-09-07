@@ -77,6 +77,22 @@ As métricas agregadas dos providers ficam disponíveis pelo Actuator em
 `lazydeploy.provider.retries`, sempre com tags de provider e resultado de baixa
 cardinalidade.
 
+Os recursos internos também possuem limites explícitos em
+`lazydeploy.resources`: o pool Hikari usa tamanho máximo, mínimo de conexões
+ociosas e timeouts finitos; o executor do monitoramento tem pool e fila
+limitados; e o scheduler executa um único trigger por vez. O ciclo de
+monitoramento usa uma política single-flight, portanto um ciclo lento não gera
+uma fila ilimitada de novos ciclos. Rejeições e ciclos ignorados são expostos
+em `lazydeploy.executor.rejections` e
+`lazydeploy.monitoring.cycles.skipped`.
+
+O servidor Tomcat usa limites finitos para threads, conexões, fila de aceite e
+timeout de conexão. O desligamento do Spring Boot é gracioso e aguarda apenas
+o tempo configurado em `SHUTDOWN_TIMEOUT` (20 segundos por padrão). Os
+timeouts SMTP também são finitos e podem ser ajustados pelas variáveis
+`MAIL_SMTP_CONNECTION_TIMEOUT_MS`, `MAIL_SMTP_READ_TIMEOUT_MS` e
+`MAIL_SMTP_WRITE_TIMEOUT_MS`.
+
 Como a autenticação utiliza cookies, operações mutáveis exigem token CSRF. Para
 testes manuais, faça primeiro `GET /api/auth/csrf`, envie o cookie recebido e
 repita o valor no header `X-XSRF-TOKEN`.

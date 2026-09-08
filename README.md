@@ -97,6 +97,24 @@ Como a autenticação utiliza cookies, operações mutáveis exigem token CSRF. 
 testes manuais, faça primeiro `GET /api/auth/csrf`, envie o cookie recebido e
 repita o valor no header `X-XSRF-TOKEN`.
 
+## Actuator e health checks
+
+Os endpoints de gerenciamento permanecem fora de `/api`, no namespace
+`/actuator`. O perfil padrão de desenvolvimento expõe `health`, `info` e
+`metrics`; `health` é público e `info`/`metrics` exigem um usuário com a role
+`ADMIN`. Detalhes de health só aparecem para usuários autorizados.
+
+Para executar em produção, ative explicitamente o perfil `prod` com
+`SPRING_PROFILES_ACTIVE=prod`. Nesse perfil somente `GET /actuator/health` e os
+grupos `liveness`/`readiness` ficam expostos; os detalhes e componentes são
+ocultados, enquanto `info` e `metrics` deixam de ser endpoints web. O liveness
+usa apenas o estado do processo e o readiness pode verificar o banco, mas
+nenhum dos dois dispara chamadas ao Keeper, GameTools, BFLIST ou SMTP.
+
+Endpoints administrativos sensíveis, como `env`, `configprops`, `beans`,
+`mappings`, `heapdump`, `threaddump`, `loggers` e `shutdown`, não são expostos;
+o endpoint de desligamento também está desabilitado explicitamente.
+
 ## API BF4
 
 - `GET /api/bf4/servers/search?query=<nome>&limit=20`

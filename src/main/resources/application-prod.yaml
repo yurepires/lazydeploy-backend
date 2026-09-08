@@ -1,0 +1,16 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    info:
+      enabled: false
+    metrics:
+      enabled: false
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+

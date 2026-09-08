@@ -40,7 +40,8 @@ class ActuatorSecurityIntegrationTest {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").exists())
-                .andExpect(jsonPath("$.components").doesNotExist());
+                .andExpect(jsonPath("$.components").doesNotExist())
+                .andExpect(jsonPath("$.details").doesNotExist());
     }
 
     @Test
@@ -88,6 +89,21 @@ class ActuatorSecurityIntegrationTest {
     @Test
     void shouldNotExposeEnvironmentEndpoint() throws Exception {
         mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldNotExposeSensitiveActuatorEndpoints() throws Exception {
+        mockMvc.perform(get("/actuator/configprops"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/actuator/beans"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/actuator/mappings"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/actuator/shutdown"))
                 .andExpect(status().isUnauthorized());
     }
 

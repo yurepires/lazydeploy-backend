@@ -47,11 +47,41 @@ server:
 management:
   endpoints:
     web:
+      base-path: /actuator
+      discovery:
+        enabled: false
       exposure:
         include: health,info,metrics
   endpoint:
+    env:
+      enabled: false
+    configprops:
+      enabled: false
+    beans:
+      enabled: false
+    mappings:
+      enabled: false
+    conditions:
+      enabled: false
+    heapdump:
+      enabled: false
+    threaddump:
+      enabled: false
+    loggers:
+      enabled: false
+    scheduledtasks:
+      enabled: false
+    caches:
+      enabled: false
+    httpexchanges:
+      enabled: false
+    startup:
+      enabled: false
+    shutdown:
+      enabled: false
     health:
-      show-details: when_authorized
+      show-details: when-authorized
+      show-components: never
       probes:
         enabled: true
       group:

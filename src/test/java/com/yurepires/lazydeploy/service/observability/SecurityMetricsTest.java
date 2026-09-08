@@ -30,6 +30,26 @@ class SecurityMetricsTest {
                 .tag("outcome", "rate_limited")
                 .counter()
                 .count()).isEqualTo(1);
+
+        metrics.recordHttpResponse(401, "authentication");
+        metrics.recordHttpResponse(403, "csrf");
+        metrics.recordHttpResponse(429, "rate_limit");
+        metrics.recordCsrfRejection("/api/auth/login");
+        metrics.recordAuthorizationRejection("not_owned");
+
+        assertThat(registry.get(SecurityMetrics.HTTP_RESPONSES)
+                .tag("status_class", "4xx")
+                .tag("security_reason", "authentication")
+                .counter()
+                .count()).isEqualTo(1);
+        assertThat(registry.get(SecurityMetrics.CSRF_REJECTIONS)
+                .tag("endpoint_group", "auth")
+                .counter()
+                .count()).isEqualTo(1);
+        assertThat(registry.get(SecurityMetrics.AUTHORIZATION_REJECTIONS)
+                .tag("reason", "not_owned")
+                .counter()
+                .count()).isEqualTo(1);
         assertThat(registry.getMeters())
                 .allMatch(meter -> meter.getId().getTags().stream()
                         .noneMatch(tag -> tag.getKey().equals("ip")

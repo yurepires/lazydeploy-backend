@@ -8,6 +8,8 @@ import com.yurepires.lazydeploy.model.server.ServerSnapshotProvider;
 import com.yurepires.lazydeploy.service.notification.NotificationOrchestrator;
 import com.yurepires.lazydeploy.service.observability.MonitoringCycleContext;
 import com.yurepires.lazydeploy.service.observability.MonitoringMetrics;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
+import com.yurepires.lazydeploy.service.observability.NotificationMetrics;
 import com.yurepires.lazydeploy.service.subscription.ServerSubscriptionPersistenceService;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,7 +43,9 @@ public class ServerMonitor {
     private final NotificationOrchestrator notificationOrchestrator;
     private final ServerSnapshotEnricher snapshotEnricher;
     private final MonitoringMetrics metrics;
+    private final NotificationMetrics notificationMetrics;
     private final TaskExecutor monitoringExecutor;
+    private final LogSanitizer logSanitizer;
     private final AtomicBoolean cycleInProgress = new AtomicBoolean();
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
 
@@ -57,7 +62,9 @@ public class ServerMonitor {
                 notificationOrchestrator,
                 new ServerSnapshotEnricher(),
                 MonitoringMetrics.noop(),
-                null
+                NotificationMetrics.noop(),
+                null,
+                new LogSanitizer()
         );
     }
 
@@ -75,7 +82,9 @@ public class ServerMonitor {
                 notificationOrchestrator,
                 snapshotEnricher,
                 MonitoringMetrics.noop(),
-                null
+                NotificationMetrics.noop(),
+                null,
+                new LogSanitizer()
         );
     }
 
@@ -94,7 +103,31 @@ public class ServerMonitor {
                 notificationOrchestrator,
                 snapshotEnricher,
                 metrics,
-                null
+                NotificationMetrics.noop(),
+                null,
+                new LogSanitizer()
+        );
+    }
+
+    public ServerMonitor(
+            ServerSnapshotProvider snapshotProvider,
+            ServerSubscriptionPersistenceService subscriptionPersistenceService,
+            MonitoringStateService monitoringStateService,
+            NotificationOrchestrator notificationOrchestrator,
+            ServerSnapshotEnricher snapshotEnricher,
+            MonitoringMetrics metrics,
+            TaskExecutor monitoringExecutor
+    ) {
+        this(
+                snapshotProvider,
+                subscriptionPersistenceService,
+                monitoringStateService,
+                notificationOrchestrator,
+                snapshotEnricher,
+                metrics,
+                NotificationMetrics.noop(),
+                monitoringExecutor,
+                new LogSanitizer()
         );
     }
 
@@ -106,7 +139,9 @@ public class ServerMonitor {
             NotificationOrchestrator notificationOrchestrator,
             ServerSnapshotEnricher snapshotEnricher,
             MonitoringMetrics metrics,
-            @Qualifier("monitoringTaskExecutor") TaskExecutor monitoringExecutor
+            NotificationMetrics notificationMetrics,
+            @Qualifier("monitoringTaskExecutor") TaskExecutor monitoringExecutor,
+            LogSanitizer logSanitizer
     ) {
         this.snapshotProvider = snapshotProvider;
         this.subscriptionPersistenceService = subscriptionPersistenceService;
@@ -114,7 +149,9 @@ public class ServerMonitor {
         this.notificationOrchestrator = notificationOrchestrator;
         this.snapshotEnricher = snapshotEnricher;
         this.metrics = metrics;
+        this.notificationMetrics = notificationMetrics;
         this.monitoringExecutor = monitoringExecutor;
+        this.logSanitizer = logSanitizer;
     }
 
     @Scheduled(fixedDelayString = "${lazydeploy.monitoring.interval}")
@@ -166,6 +203,8 @@ public class ServerMonitor {
         MonitoringCycleContext cycleContext = MonitoringCycleContext.start();
         long startedAt = System.nanoTime();
         String cycleStatus = "success";
+        CycleStatistics statistics = new CycleStatistics();
+        long deliveriesBeforeCycle = notificationMetrics.successfulDeliveryCount();
         MDC.put("cycleId", cycleContext.cycleId().toString());
 
         try {
@@ -176,7 +215,11 @@ public class ServerMonitor {
             metrics.setActiveCounts(subscriptionsByServer.size(), activeSubscriptionCount);
 
             for (List<ServerSubscription> serverSubscriptions : subscriptionsByServer.values()) {
-                ServerProcessingOutcome outcome = monitorServerSafely(serverSubscriptions);
+                statistics.serversProcessed++;
+                ServerProcessingOutcome outcome = monitorServerSafely(
+                        serverSubscriptions,
+                        statistics
+                );
                 metrics.recordServerProcessed(outcome.metricValue());
                 if (outcome == ServerProcessingOutcome.FAILED) {
                     cycleStatus = "partial";
@@ -186,17 +229,31 @@ public class ServerMonitor {
             cycleStatus = "failed";
             log.error(
                     "Falha global no ciclo de monitoramento | exceptionType={}",
-                    exception.getClass().getSimpleName()
+                    exception.getClass().getSimpleName(),
+                    exception
             );
         } finally {
+            statistics.notificationsSent = (int) Math.max(
+                    0,
+                    notificationMetrics.successfulDeliveryCount() - deliveriesBeforeCycle
+            );
             metrics.recordCycle(
                     cycleStatus,
                     Duration.ofNanos(System.nanoTime() - startedAt)
             );
-            log.debug(
-                    "MONITORING CYCLE | cycleId={} | status={}",
+            log.info(
+                    "MONITORING CYCLE | cycleId={} | serversProcessed={} | "
+                            + "serversSucceeded={} | serversFailed={} | "
+                            + "subscriptionsEvaluated={} | notificationsSent={} | "
+                            + "durationMs={} | status={}",
                     cycleContext.cycleId(),
-                    cycleStatus
+                    statistics.serversProcessed,
+                    statistics.serversSucceeded,
+                    statistics.serversFailed,
+                    statistics.subscriptionsEvaluated,
+                    statistics.notificationsSent,
+                    Duration.ofNanos(System.nanoTime() - startedAt).toMillis(),
+                    cycleStatus.toUpperCase(Locale.ROOT)
             );
             MDC.remove("cycleId");
         }
@@ -214,21 +271,25 @@ public class ServerMonitor {
     }
 
     private ServerProcessingOutcome monitorServerSafely(
-            List<ServerSubscription> serverSubscriptions
+            List<ServerSubscription> serverSubscriptions,
+            CycleStatistics statistics
     ) {
         Server server = serverSubscriptions.getFirst().server();
 
         try {
-            boolean processed = monitorServer(server, serverSubscriptions);
+            boolean processed = monitorServer(server, serverSubscriptions, statistics);
             if (processed) {
+                statistics.serversSucceeded++;
                 return ServerProcessingOutcome.SUCCESS;
             }
+            statistics.serversFailed++;
             return ServerProcessingOutcome.FAILED;
         } catch (RuntimeException exception) {
+            statistics.serversFailed++;
             log.error(
-                    "Erro ao monitorar serverId={} | exceptionType={}",
-                    server.id(),
-                    exception.getClass().getSimpleName()
+                    "Erro ao monitorar server | exceptionType={}",
+                    exception.getClass().getSimpleName(),
+                    exception
             );
             return ServerProcessingOutcome.FAILED;
         }
@@ -236,19 +297,20 @@ public class ServerMonitor {
 
     private boolean monitorServer(
             Server server,
-            List<ServerSubscription> serverSubscriptions
+            List<ServerSubscription> serverSubscriptions,
+            CycleStatistics statistics
     ) {
         String serverGuid = serverSubscriptions.getFirst().externalGuid();
         ServerReference serverReference = createServerReference(server, serverGuid);
         Optional<ServerSnapshot> snapshot = snapshotProvider.getSnapshot(serverReference);
 
         if (snapshot.isEmpty()) {
-            log.warn("Snapshot indisponível | serverId={} | guid={}", server.id(), serverGuid);
+            log.warn("SNAPSHOT UNAVAILABLE | provider={}", snapshotProvider.providerId());
             return false;
         }
 
         ServerSnapshot enrichedSnapshot = snapshotEnricher.enrich(snapshot.get());
-        return processSnapshot(server, serverSubscriptions, enrichedSnapshot);
+        return processSnapshot(server, serverSubscriptions, enrichedSnapshot, statistics);
     }
 
     private ServerReference createServerReference(Server server, String serverGuid) {
@@ -264,7 +326,8 @@ public class ServerMonitor {
     private boolean processSnapshot(
             Server server,
             List<ServerSubscription> serverSubscriptions,
-            ServerSnapshot currentSnapshot
+            ServerSnapshot currentSnapshot,
+            CycleStatistics statistics
     ) {
         MonitoringObservation observation = monitoringStateService.observe(
                 server,
@@ -276,10 +339,15 @@ public class ServerMonitor {
         }
 
         if (observation.newRound()) {
-            logRoundChange(server, currentSnapshot, observation);
+            logRoundChange(currentSnapshot);
         }
 
-        return evaluateSubscriptions(serverSubscriptions, currentSnapshot, observation);
+        return evaluateSubscriptions(
+                serverSubscriptions,
+                currentSnapshot,
+                observation,
+                statistics
+        );
     }
 
     private boolean initializeSubscriptions(
@@ -296,44 +364,40 @@ public class ServerMonitor {
             } catch (RuntimeException exception) {
                 allSubscriptionsProcessed = false;
                 log.error(
-                        "Erro ao inicializar subscriptionId={} | exceptionType={}",
-                        subscription.id(),
-                        exception.getClass().getSimpleName()
+                        "Erro ao inicializar subscription | exceptionType={}",
+                        exception.getClass().getSimpleName(),
+                        exception
                 );
             }
         }
 
-        log.info(
-                "Estado inicial persistido | serverId={} | roundInstanceId={}",
-                server.id(),
-                roundInstanceId
+        log.debug(
+                "INITIAL MONITORING STATE PERSISTED | subscriptions={}",
+                serverSubscriptions.size()
         );
         return allSubscriptionsProcessed;
     }
 
     private void logRoundChange(
-            Server server,
-            ServerSnapshot currentSnapshot,
-            MonitoringObservation observation
+            ServerSnapshot currentSnapshot
     ) {
         log.info(
-                "ROUND CHANGE | serverId={} | previous={} | current={} | map={}",
-                server.id(),
-                observation.previous().roundInstanceId(),
-                observation.current().roundInstanceId(),
-                currentSnapshot.map().normalizedId()
+                "ROUND CHANGE | map={}",
+                logSanitizer.sanitize(currentSnapshot.map().normalizedId())
         );
     }
 
     private boolean evaluateSubscriptions(
             List<ServerSubscription> serverSubscriptions,
             ServerSnapshot currentSnapshot,
-            MonitoringObservation observation
+            MonitoringObservation observation,
+            CycleStatistics statistics
     ) {
         boolean allSubscriptionsProcessed = true;
 
         for (ServerSubscription subscription : serverSubscriptions) {
-            if (!evaluateSubscriptionSafely(subscription, currentSnapshot, observation)) {
+            statistics.subscriptionsEvaluated++;
+            if (!evaluateSubscriptionSafely(subscription, currentSnapshot, observation, statistics)) {
                 allSubscriptionsProcessed = false;
             }
         }
@@ -344,7 +408,8 @@ public class ServerMonitor {
     private boolean evaluateSubscriptionSafely(
             ServerSubscription subscription,
             ServerSnapshot currentSnapshot,
-            MonitoringObservation observation
+            MonitoringObservation observation,
+            CycleStatistics statistics
     ) {
         try {
             notificationOrchestrator.process(
@@ -357,12 +422,20 @@ public class ServerMonitor {
             return true;
         } catch (RuntimeException exception) {
             log.error(
-                    "Erro ao avaliar subscriptionId={} | exceptionType={}",
-                    subscription.id(),
-                    exception.getClass().getSimpleName()
+                    "Erro ao avaliar subscription | exceptionType={}",
+                    exception.getClass().getSimpleName(),
+                    exception
             );
             return false;
         }
+    }
+
+    private static final class CycleStatistics {
+        private int serversProcessed;
+        private int serversSucceeded;
+        private int serversFailed;
+        private int subscriptionsEvaluated;
+        private int notificationsSent;
     }
 
     private enum ServerProcessingOutcome {

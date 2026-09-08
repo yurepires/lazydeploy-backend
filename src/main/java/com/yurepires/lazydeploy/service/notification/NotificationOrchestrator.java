@@ -17,6 +17,7 @@ import com.yurepires.lazydeploy.model.server.MonitoredServer;
 import com.yurepires.lazydeploy.model.server.ServerSnapshot;
 import com.yurepires.lazydeploy.service.notification.rule.NotificationEvaluationService;
 import com.yurepires.lazydeploy.service.observability.NotificationMetrics;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ public class NotificationOrchestrator {
     private final NotificationPersistenceService persistence;
     private final MonitoringMapper monitoringMapper;
     private final NotificationMetrics metrics;
+    private final LogSanitizer logSanitizer;
 
     public NotificationOrchestrator(
             NotificationEvaluationService evaluationService,
@@ -58,7 +60,29 @@ public class NotificationOrchestrator {
                 notificationStates,
                 persistence,
                 monitoringMapper,
-                NotificationMetrics.noop()
+                NotificationMetrics.noop(),
+                new LogSanitizer()
+        );
+    }
+
+    public NotificationOrchestrator(
+            NotificationEvaluationService evaluationService,
+            NotificationChannelRegistry channelRegistry,
+            DeliveryPolicy deliveryPolicy,
+            NotificationStateRepository notificationStates,
+            NotificationPersistenceService persistence,
+            MonitoringMapper monitoringMapper,
+            NotificationMetrics metrics
+    ) {
+        this(
+                evaluationService,
+                channelRegistry,
+                deliveryPolicy,
+                notificationStates,
+                persistence,
+                monitoringMapper,
+                metrics,
+                new LogSanitizer()
         );
     }
 
@@ -70,7 +94,8 @@ public class NotificationOrchestrator {
             NotificationStateRepository notificationStates,
             NotificationPersistenceService persistence,
             MonitoringMapper monitoringMapper,
-            NotificationMetrics metrics
+            NotificationMetrics metrics,
+            LogSanitizer logSanitizer
     ) {
         this.evaluationService = evaluationService;
         this.channelRegistry = channelRegistry;
@@ -79,6 +104,7 @@ public class NotificationOrchestrator {
         this.persistence = persistence;
         this.monitoringMapper = monitoringMapper;
         this.metrics = metrics;
+        this.logSanitizer = logSanitizer;
     }
 
     public void initialize(UUID subscriptionId, UUID roundInstanceId) {
@@ -170,16 +196,13 @@ public class NotificationOrchestrator {
                 );
                 if (result.success()) {
                     log.info(
-                            "Notificação enviada | channel={} | subscriptionId={} | sentAt={}",
-                            result.channelType(),
-                            server.id(),
-                            result.sentAt()
+                            "NOTIFICATION DELIVERY | channel={} | outcome=success",
+                            result.channelType()
                     );
                 } else {
                     log.warn(
-                            "Falha no canal {} para subscriptionId={}: {}",
+                            "NOTIFICATION DELIVERY | channel={} | outcome=failure | reason={}",
                             result.channelType(),
-                            server.id(),
                             sanitizeErrorMessage(result.errorMessage())
                     );
                 }
@@ -190,9 +213,9 @@ public class NotificationOrchestrator {
                         java.time.Duration.ofNanos(System.nanoTime() - startedAt)
                 );
                 log.error(
-                        "Erro inesperado no canal {} para subscriptionId={}",
-                        configuration.type(),
-                        server.id()
+                        "Erro inesperado no canal {}",
+                        logSanitizer.sanitize(configuration.type()),
+                        exception
                 );
                 NotificationResult failure = NotificationResult.failure(configuration.type(), exception.getMessage());
                 results.add(failure);
@@ -211,26 +234,21 @@ public class NotificationOrchestrator {
     private void logDecision(MonitoredServer server, ServerSnapshot snapshot, NotificationDecision decision) {
         for (RuleEvaluationResult result : decision.results()) {
             log.debug(
-                    "RULE EVALUATION | subscriptionId={} | rule={} | matched={} | reason={} | metadata={}",
-                    server.id(), result.ruleType(), result.matched(), result.reason(), result.metadata()
+                    "RULE EVALUATION | rule={} | matched={} | reason={} | metadata={}",
+                    logSanitizer.sanitize(result.ruleType()),
+                    result.matched(),
+                    logSanitizer.sanitize(result.reason()),
+                    logSanitizer.sanitize(String.valueOf(result.metadata()))
             );
-        }
-        String serverDisplayName = server.displayName();
-        if (serverDisplayName == null) {
-            serverDisplayName = snapshot.serverGuid();
         }
 
         if (decision.approved()) {
             log.info(
-                    "NOTIFICATION DECISION | server='{}' | serverId={} | approved=true",
-                    serverDisplayName,
-                    server.serverId()
+                    "NOTIFICATION DECISION | approved=true"
             );
         } else {
             log.debug(
-                    "NOTIFICATION DECISION | server='{}' | serverId={} | approved=false",
-                    serverDisplayName,
-                    server.serverId()
+                    "NOTIFICATION DECISION | approved=false"
             );
         }
     }
@@ -240,11 +258,7 @@ public class NotificationOrchestrator {
             return "erro não informado";
         }
 
-        String sanitizedMessage = message.replaceAll("[\\r\\n]+", " ");
-        sanitizedMessage = sanitizedMessage.replaceAll(
-                "(?i)(password|passwd|secret|token|authorization)\\s*[:=]\\s*\\S+",
-                "$1=[REDACTED]"
-        );
+        String sanitizedMessage = logSanitizer.sanitize(message);
 
         String normalizedMessage = sanitizedMessage.toLowerCase(Locale.ROOT);
         if (normalizedMessage.contains("smtp")

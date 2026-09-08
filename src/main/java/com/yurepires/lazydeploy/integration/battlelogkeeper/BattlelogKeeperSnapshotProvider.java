@@ -10,6 +10,10 @@ import com.yurepires.lazydeploy.model.server.ServerSnapshotProvider;
 import com.yurepires.lazydeploy.service.observability.ExternalProviderHealthTracker;
 import com.yurepires.lazydeploy.service.observability.ExternalProviderMetrics;
 import com.yurepires.lazydeploy.service.observability.KeeperMetrics;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
 import com.yurepires.lazydeploy.service.provider.ExternalProviderFailureClassifier;
 import com.yurepires.lazydeploy.service.provider.ProviderConcurrencyLimiter;
 import com.yurepires.lazydeploy.service.provider.ProviderRetryExecutor;
@@ -38,6 +42,7 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
     private final ProviderConcurrencyLimiter concurrencyLimiter;
     private final ProviderRetryExecutor retryExecutor;
     private final ProviderProperties.ProviderSettings settings;
+    private final SecurityEventLogger securityEventLogger;
 
     public BattlelogKeeperSnapshotProvider(@Qualifier("keeperWebClient") WebClient webClient, KeeperSnapshotMapper mapper) {
         this(
@@ -49,7 +54,8 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
                 ExternalProviderMetrics.noop(),
                 null,
                 new ProviderRetryExecutor(ExternalProviderMetrics.noop()),
-                ProviderProperties.ProviderSettings.keeperDefaults()
+                ProviderProperties.ProviderSettings.keeperDefaults(),
+                new SecurityEventLogger(new LogSanitizer())
         );
     }
 
@@ -68,7 +74,8 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
                 ExternalProviderMetrics.noop(),
                 null,
                 new ProviderRetryExecutor(ExternalProviderMetrics.noop()),
-                ProviderProperties.ProviderSettings.keeperDefaults()
+                ProviderProperties.ProviderSettings.keeperDefaults(),
+                new SecurityEventLogger(new LogSanitizer())
         );
     }
 
@@ -82,7 +89,8 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
             ExternalProviderMetrics providerMetrics,
             ProviderConcurrencyLimiter concurrencyLimiter,
             ProviderRetryExecutor retryExecutor,
-            ProviderProperties providerProperties
+            ProviderProperties providerProperties,
+            SecurityEventLogger securityEventLogger
     ) {
         this(
                 webClient,
@@ -93,7 +101,8 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
                 providerMetrics,
                 concurrencyLimiter,
                 retryExecutor,
-                providerProperties.keeper()
+                providerProperties.keeper(),
+                securityEventLogger
         );
     }
 
@@ -106,7 +115,8 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
             ExternalProviderMetrics providerMetrics,
             ProviderConcurrencyLimiter concurrencyLimiter,
             ProviderRetryExecutor retryExecutor,
-            ProviderProperties.ProviderSettings settings
+            ProviderProperties.ProviderSettings settings,
+            SecurityEventLogger securityEventLogger
     ) {
         this.webClient = webClient;
         this.mapper = mapper;
@@ -117,6 +127,7 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
         this.concurrencyLimiter = concurrencyLimiter;
         this.retryExecutor = retryExecutor;
         this.settings = settings;
+        this.securityEventLogger = securityEventLogger;
     }
 
     @Override
@@ -139,7 +150,7 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
                     && exception.category() == ExternalProviderFailureCategory.TIMEOUT) {
                 providerMetrics.recordTimeout(PROVIDER_ID);
             }
-            log.warn("Falha no Battlelog Keeper | category={}", exception.category());
+            logProviderFailure(exception.category(), exception);
             return Optional.empty();
         } catch (RuntimeException exception) {
             ExternalProviderException providerException =
@@ -150,13 +161,34 @@ public class BattlelogKeeperSnapshotProvider implements ServerSnapshotProvider {
                     && providerException.category() == ExternalProviderFailureCategory.TIMEOUT) {
                 providerMetrics.recordTimeout(PROVIDER_ID);
             }
-            log.warn("Falha no Battlelog Keeper | category={}", providerException.category());
+            logProviderFailure(providerException.category(), providerException);
             return Optional.empty();
         } finally {
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             metrics.recordRequest(outcome, duration);
             providerMetrics.recordRequest(PROVIDER_ID, outcome, duration);
         }
+    }
+
+    private void logProviderFailure(
+            ExternalProviderFailureCategory category,
+            Throwable failure
+    ) {
+        if (category == ExternalProviderFailureCategory.UNKNOWN) {
+            log.error(
+                    "PROVIDER FAILURE | provider=keeper | category={}",
+                    category,
+                    failure
+            );
+        } else {
+            log.warn("PROVIDER FAILURE | provider=keeper | category={}", category);
+        }
+        securityEventLogger.log(
+                SecurityEventType.PROVIDER_FAILURE,
+                SecurityEventOutcome.FAILURE,
+                category == null ? "UNKNOWN" : category.name(),
+                "/external/keeper"
+        );
     }
 
     private ServerSnapshot executeWithRetry(ServerReference server) {

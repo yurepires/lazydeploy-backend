@@ -103,11 +103,7 @@ public class ConfigureSubscriptionService {
             }
 
             outcome = "success";
-            log.info(
-                    "Subscription configurada | subscriptionId={} | serverId={}",
-                    subscription.id(),
-                    subscription.server().id()
-            );
+            log.info("SUBSCRIPTION CONFIGURED | outcome=success");
             return subscription;
         } catch (SubscriptionAlreadyExistsException exception) {
             outcome = "duplicate";

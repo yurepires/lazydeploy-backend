@@ -3,6 +3,7 @@ package com.yurepires.lazydeploy.service.monitoring;
 import com.yurepires.lazydeploy.model.server.MapSnapshot;
 import com.yurepires.lazydeploy.model.server.ServerSnapshot;
 import com.yurepires.lazydeploy.service.map.MapCatalogService;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,14 +19,23 @@ public class ServerSnapshotEnricher {
     private static final Logger log = LoggerFactory.getLogger(ServerSnapshotEnricher.class);
 
     private final MapCatalogService mapCatalogService;
+    private final LogSanitizer logSanitizer;
 
     public ServerSnapshotEnricher() {
-        this.mapCatalogService = null;
+        this(null, new LogSanitizer());
+    }
+
+    public ServerSnapshotEnricher(MapCatalogService mapCatalogService) {
+        this(mapCatalogService, new LogSanitizer());
     }
 
     @Autowired
-    public ServerSnapshotEnricher(MapCatalogService mapCatalogService) {
+    public ServerSnapshotEnricher(
+            MapCatalogService mapCatalogService,
+            LogSanitizer logSanitizer
+    ) {
         this.mapCatalogService = mapCatalogService;
+        this.logSanitizer = logSanitizer;
     }
 
     public ServerSnapshot enrich(ServerSnapshot snapshot) {
@@ -42,7 +52,10 @@ public class ServerSnapshotEnricher {
         boolean knownMap = mapCatalogService.isKnownMap(normalizedMapId);
         String displayName = mapCatalogService.getDisplayName(normalizedMapId);
         if (!knownMap) {
-            log.warn("Mapa não catalogado recebido do Keeper | mapId={}", normalizedMapId);
+            log.warn(
+                    "Mapa não catalogado recebido do Keeper | mapId={}",
+                    logSanitizer.sanitize(normalizedMapId)
+            );
         }
 
         MapSnapshot enrichedMap = new MapSnapshot(

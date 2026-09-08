@@ -8,6 +8,7 @@ import com.yurepires.lazydeploy.security.ratelimit.RateLimitService;
 import com.yurepires.lazydeploy.security.request.RequestBodyLimitFilter;
 import com.yurepires.lazydeploy.security.request.RequestBodyLimitResponseWriter;
 import com.yurepires.lazydeploy.service.observability.BusinessLimitMetrics;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
 import com.yurepires.lazydeploy.service.observability.SecurityMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -45,6 +46,7 @@ public class SecurityConfig {
             RateLimitService rateLimitService,
             RateLimitKeyResolver keyResolver,
             SecurityMetrics securityMetrics,
+            SecurityEventLogger securityEventLogger,
             RateLimitResponseWriter responseWriter,
             ObjectMapper objectMapper
     ) {
@@ -53,6 +55,7 @@ public class SecurityConfig {
                 rateLimitService,
                 keyResolver,
                 securityMetrics,
+                securityEventLogger,
                 responseWriter,
                 objectMapper
         );

@@ -1,5 +1,10 @@
 package com.yurepires.lazydeploy.exception;
 
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
+import com.yurepires.lazydeploy.service.observability.SecurityMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -33,6 +38,20 @@ import java.sql.SQLTransientConnectionException;
 public class RestExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(RestExceptionHandler.class);
+
+    private final SecurityMetrics securityMetrics;
+    private final SecurityEventLogger securityEventLogger;
+    private final LogSanitizer logSanitizer;
+
+    public RestExceptionHandler(
+            SecurityMetrics securityMetrics,
+            SecurityEventLogger securityEventLogger,
+            LogSanitizer logSanitizer
+    ) {
+        this.securityMetrics = securityMetrics;
+        this.securityEventLogger = securityEventLogger;
+        this.logSanitizer = logSanitizer;
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleResourceNotFound(
@@ -96,7 +115,7 @@ public class RestExceptionHandler {
         if (exception instanceof DataIntegrityViolationException) {
             log.warn(
                     "Violação de integridade ao processar {} | exceptionType={}",
-                    request.getRequestURI(),
+                    logSanitizer.normalizeEndpoint(request.getRequestURI()),
                     exception.getClass().getSimpleName()
             );
         }
@@ -123,7 +142,7 @@ public class RestExceptionHandler {
     ) {
         log.warn(
                 "Banco temporariamente indisponível ao processar {} | exceptionType={}",
-                request.getRequestURI(),
+                logSanitizer.normalizeEndpoint(request.getRequestURI()),
                 exception.getClass().getSimpleName()
         );
         return response(
@@ -194,6 +213,18 @@ public class RestExceptionHandler {
             RateLimitExceededException exception,
             HttpServletRequest request
     ) {
+        recordResponseMetrics(
+                HttpStatus.TOO_MANY_REQUESTS,
+                exception.getErrorCode(),
+                request
+        );
+        securityEventLogger.log(
+                SecurityEventType.RATE_LIMIT_REJECTED,
+                SecurityEventOutcome.REJECTED,
+                "RATE_LIMIT",
+                request.getRequestURI(),
+                request.getMethod()
+        );
         ProblemDetail problemDetail = ProblemDetailFactory.create(
                 HttpStatus.TOO_MANY_REQUESTS,
                 "Too Many Requests",
@@ -391,8 +422,9 @@ public class RestExceptionHandler {
     ) {
         log.error(
                 "Erro inesperado ao processar {} | exceptionType={}",
-                request.getRequestURI(),
-                exception.getClass().getSimpleName()
+                logSanitizer.normalizeEndpoint(request.getRequestURI()),
+                exception.getClass().getSimpleName(),
+                exception
         );
         return response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
@@ -421,6 +453,7 @@ public class RestExceptionHandler {
             HttpServletRequest request,
             List<ProblemDetailFactory.FieldValidationError> fieldErrors
     ) {
+        recordResponseMetrics(status, errorCode, request);
         ProblemDetail problemDetail = ProblemDetailFactory.create(
                 status,
                 title,
@@ -430,5 +463,69 @@ public class RestExceptionHandler {
                 fieldErrors
         );
         return ResponseEntity.status(status).body(problemDetail);
+    }
+
+    private void recordResponseMetrics(
+            HttpStatus status,
+            String errorCode,
+            HttpServletRequest request
+    ) {
+        String securityReason = securityReason(status, errorCode);
+        securityMetrics.recordHttpResponse(status.value(), securityReason);
+
+        if (isBusinessLimit(errorCode)) {
+            securityEventLogger.log(
+                    SecurityEventType.BUSINESS_LIMIT_REJECTED,
+                    SecurityEventOutcome.REJECTED,
+                    errorCode,
+                    request.getRequestURI()
+            );
+        }
+        if (errorCode != null && errorCode.startsWith("EXTERNAL_PROVIDER")) {
+            securityEventLogger.log(
+                    SecurityEventType.PROVIDER_FAILURE,
+                    SecurityEventOutcome.FAILURE,
+                    errorCode,
+                    request.getRequestURI()
+            );
+        }
+        if ("SUBSCRIPTION_NOT_FOUND".equals(errorCode)) {
+            securityMetrics.recordAuthorizationRejection("not_owned");
+            securityEventLogger.log(
+                    SecurityEventType.RESOURCE_NOT_OWNED,
+                    SecurityEventOutcome.REJECTED,
+                    "NOT_OWNED",
+                    request.getRequestURI()
+            );
+        }
+    }
+
+    private String securityReason(HttpStatus status, String errorCode) {
+        if (status == HttpStatus.UNAUTHORIZED) {
+            return "authentication";
+        }
+        if (status == HttpStatus.FORBIDDEN) {
+            return "authorization";
+        }
+        if (status == HttpStatus.TOO_MANY_REQUESTS) {
+            return "rate_limit";
+        }
+        if (isBusinessLimit(errorCode)) {
+            return "business_limit";
+        }
+        if (status == HttpStatus.NOT_FOUND) {
+            return "not_found";
+        }
+        if (status.is4xxClientError()) {
+            return "validation";
+        }
+        return "other";
+    }
+
+    private boolean isBusinessLimit(String errorCode) {
+        if (errorCode == null) {
+            return false;
+        }
+        return errorCode.contains("LIMIT") || errorCode.contains("TOO_MANY_MAPS");
     }
 }

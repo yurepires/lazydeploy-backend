@@ -14,6 +14,15 @@ management:
       probes:
         enabled: true
 
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.SQL: OFF
+    org.hibernate.orm.jdbc.bind: OFF
+    org.hibernate.orm.jdbc.extract: OFF
+    org.hibernate.orm.connections.pooling: WARN
+    com.zaxxer.hikari: WARN
+
 server:
   forward-headers-strategy: framework
   servlet:

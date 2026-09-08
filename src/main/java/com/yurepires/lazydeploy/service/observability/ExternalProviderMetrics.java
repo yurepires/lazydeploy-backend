@@ -19,6 +19,8 @@ public class ExternalProviderMetrics {
     public static final String CONCURRENCY_REJECTIONS =
             "lazydeploy.provider.concurrency_rejections";
     public static final String RETRIES = "lazydeploy.provider.retries";
+    public static final String RESOURCE_SATURATION =
+            "lazydeploy.resources.saturation";
 
     private static final Set<String> PROVIDERS = Set.of(
             "gametools",
@@ -88,6 +90,15 @@ public class ExternalProviderMetrics {
                 "provider",
                 normalizeProvider(provider)
         );
+        try {
+            Counter.builder(RESOURCE_SATURATION)
+                    .tag("resource", "provider_bulkhead")
+                    .description("Eventos de saturação de recursos internos")
+                    .register(meterRegistry)
+                    .increment();
+        } catch (RuntimeException ignored) {
+            // Métricas não podem interromper a integração.
+        }
     }
 
     public void recordRetry(String provider, String outcome) {

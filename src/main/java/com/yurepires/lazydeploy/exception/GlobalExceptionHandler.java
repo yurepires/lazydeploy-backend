@@ -2,6 +2,7 @@ package com.yurepires.lazydeploy.exception;
 
 import com.yurepires.lazydeploy.dto.response.ErrorResponse;
 import com.yurepires.lazydeploy.dto.response.FieldValidationErrorResponse;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -27,6 +28,7 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final LogSanitizer LOG_SANITIZER = new LogSanitizer();
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException exception, HttpServletRequest request) {
@@ -174,8 +176,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnexpectedError(Exception exception, HttpServletRequest request) {
         log.error(
                 "Erro inesperado ao processar {} | exceptionType={}",
-                request.getRequestURI(),
-                exception.getClass().getSimpleName()
+                LOG_SANITIZER.normalizeEndpoint(request.getRequestURI()),
+                exception.getClass().getSimpleName(),
+                exception
         );
 
         ErrorResponse response = createErrorResponse(

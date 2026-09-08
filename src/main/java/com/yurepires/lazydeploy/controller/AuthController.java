@@ -10,6 +10,9 @@ import com.yurepires.lazydeploy.security.EmailNormalizer;
 import com.yurepires.lazydeploy.service.auth.CurrentUserProfileService;
 import com.yurepires.lazydeploy.service.auth.RegisterUserService;
 import com.yurepires.lazydeploy.service.observability.SecurityMetrics;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -40,6 +43,7 @@ public class AuthController {
     private final CurrentUserProvider currentUserProvider;
     private final CurrentUserProfileService currentUserProfileService;
     private final SecurityMetrics securityMetrics;
+    private final SecurityEventLogger securityEventLogger;
 
     public AuthController(
             RegisterUserService registerUserService,
@@ -48,7 +52,8 @@ public class AuthController {
             EmailNormalizer emailNormalizer,
             CurrentUserProvider currentUserProvider,
             CurrentUserProfileService currentUserProfileService,
-            SecurityMetrics securityMetrics
+            SecurityMetrics securityMetrics,
+            SecurityEventLogger securityEventLogger
     ) {
         this.registerUserService = registerUserService;
         this.authenticationManager = authenticationManager;
@@ -57,6 +62,7 @@ public class AuthController {
         this.currentUserProvider = currentUserProvider;
         this.currentUserProfileService = currentUserProfileService;
         this.securityMetrics = securityMetrics;
+        this.securityEventLogger = securityEventLogger;
     }
 
     @PostMapping("/register")
@@ -84,6 +90,12 @@ public class AuthController {
             );
         } catch (AuthenticationException exception) {
             securityMetrics.recordLoginAttempt("invalid_credentials");
+            securityEventLogger.log(
+                    SecurityEventType.AUTH_LOGIN_FAILURE,
+                    SecurityEventOutcome.REJECTED,
+                    "INVALID_CREDENTIALS",
+                    "/api/auth/login"
+            );
             throw new InvalidCredentialsException();
         }
 
@@ -94,6 +106,12 @@ public class AuthController {
 
         AuthenticatedUser authenticatedUser = (AuthenticatedUser) authentication.getPrincipal();
         securityMetrics.recordLoginAttempt("success");
+        securityEventLogger.log(
+                SecurityEventType.AUTH_LOGIN_SUCCESS,
+                SecurityEventOutcome.SUCCESS,
+                "AUTHENTICATED",
+                "/api/auth/login"
+        );
         return AuthenticatedUserResponse.from(authenticatedUser);
     }
 

@@ -1,6 +1,7 @@
 package com.yurepires.lazydeploy.controller;
 
 import jakarta.servlet.http.Cookie;
+import org.slf4j.MDC;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -150,6 +151,28 @@ class HttpSecurityIntegrationTest {
                 ))
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(header().doesNotExist("Strict-Transport-Security"));
+    }
+
+    @Test
+    void shouldGenerateCorrelationIdAndClearMdcAfterRequest() throws Exception {
+        mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Request-ID", containsString("-")));
+
+        assertThat(MDC.get("correlationId")).isNull();
+    }
+
+    @Test
+    void shouldKeepValidCorrelationIdAndReplaceInvalidValue() throws Exception {
+        mockMvc.perform(get("/api/auth/csrf")
+                        .header("X-Request-ID", "frontend_request_123"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Request-ID", "frontend_request_123"));
+
+        mockMvc.perform(get("/api/auth/csrf")
+                        .header("X-Request-ID", "invalid\nrequest"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Request-ID", containsString("-")));
     }
 
     @Test

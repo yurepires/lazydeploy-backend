@@ -3,6 +3,10 @@ package com.yurepires.lazydeploy.security.ratelimit;
 import com.yurepires.lazydeploy.config.RateLimitProperties;
 import com.yurepires.lazydeploy.dto.request.LoginRequest;
 import com.yurepires.lazydeploy.exception.RateLimitExceededException;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
 import com.yurepires.lazydeploy.service.observability.SecurityMetrics;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,6 +34,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitService rateLimitService;
     private final RateLimitKeyResolver keyResolver;
     private final SecurityMetrics securityMetrics;
+    private final SecurityEventLogger securityEventLogger;
     private final RateLimitResponseWriter responseWriter;
     private final ObjectMapper objectMapper;
 
@@ -41,10 +46,31 @@ public class RateLimitFilter extends OncePerRequestFilter {
             RateLimitResponseWriter responseWriter,
             ObjectMapper objectMapper
     ) {
+        this(
+                properties,
+                rateLimitService,
+                keyResolver,
+                securityMetrics,
+                new SecurityEventLogger(new LogSanitizer()),
+                responseWriter,
+                objectMapper
+        );
+    }
+
+    public RateLimitFilter(
+            RateLimitProperties properties,
+            RateLimitService rateLimitService,
+            RateLimitKeyResolver keyResolver,
+            SecurityMetrics securityMetrics,
+            SecurityEventLogger securityEventLogger,
+            RateLimitResponseWriter responseWriter,
+            ObjectMapper objectMapper
+    ) {
         this.properties = properties;
         this.rateLimitService = rateLimitService;
         this.keyResolver = keyResolver;
         this.securityMetrics = securityMetrics;
+        this.securityEventLogger = securityEventLogger;
         this.responseWriter = responseWriter;
         this.objectMapper = objectMapper;
     }
@@ -203,7 +229,24 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 response,
                 new RateLimitExceededException(decision.retryAfterSeconds())
         );
+        securityEventLogger.log(
+                rateLimitEventType(policyName),
+                SecurityEventOutcome.REJECTED,
+                "RATE_LIMIT",
+                request.getRequestURI()
+        );
         return false;
+    }
+
+    private SecurityEventType rateLimitEventType(String policyName) {
+        if (RateLimitPolicyNames.LOGIN_IP.equals(policyName)
+                || RateLimitPolicyNames.LOGIN_IDENTITY.equals(policyName)) {
+            return SecurityEventType.AUTH_RATE_LIMITED;
+        }
+        if (RateLimitPolicyNames.REGISTER_IP.equals(policyName)) {
+            return SecurityEventType.REGISTER_RATE_LIMITED;
+        }
+        return SecurityEventType.RATE_LIMIT_REJECTED;
     }
 
     private String extractLoginEmail(CachedBodyHttpServletRequest request) {

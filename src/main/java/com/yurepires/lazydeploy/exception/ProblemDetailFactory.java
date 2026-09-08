@@ -1,5 +1,6 @@
 package com.yurepires.lazydeploy.exception;
 
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
@@ -27,6 +28,11 @@ public final class ProblemDetailFactory {
         problemDetail.setProperty("errorCode", errorCode);
         problemDetail.setProperty("code", errorCode);
         problemDetail.setProperty("timestamp", Instant.now());
+
+        String correlationId = MDC.get("correlationId");
+        if (correlationId != null && !correlationId.isBlank()) {
+            problemDetail.setProperty("correlationId", correlationId);
+        }
 
         if (fieldErrors != null && !fieldErrors.isEmpty()) {
             problemDetail.setProperty("fieldErrors", fieldErrors);

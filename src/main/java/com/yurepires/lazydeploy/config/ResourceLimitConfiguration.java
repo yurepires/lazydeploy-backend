@@ -1,6 +1,10 @@
 package com.yurepires.lazydeploy.config;
 
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
 import com.yurepires.lazydeploy.service.observability.ResourceMetrics;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -29,7 +33,32 @@ public class ResourceLimitConfiguration {
     @Bean(name = "monitoringTaskExecutor")
     public ThreadPoolTaskExecutor monitoringTaskExecutor(
             ResourceProperties properties,
+            ResourceMetrics resourceMetrics,
+            SecurityEventLogger securityEventLogger
+    ) {
+        return createMonitoringTaskExecutor(
+                properties,
+                resourceMetrics,
+                securityEventLogger
+        );
+    }
+
+    /** Mantém uma construção simples para testes unitários sem o contexto Spring. */
+    public ThreadPoolTaskExecutor monitoringTaskExecutor(
+            ResourceProperties properties,
             ResourceMetrics resourceMetrics
+    ) {
+        return createMonitoringTaskExecutor(
+                properties,
+                resourceMetrics,
+                new SecurityEventLogger(new LogSanitizer())
+        );
+    }
+
+    private ThreadPoolTaskExecutor createMonitoringTaskExecutor(
+            ResourceProperties properties,
+            ResourceMetrics resourceMetrics,
+            SecurityEventLogger securityEventLogger
     ) {
         ResourceProperties.MonitoringExecutor settings =
                 properties.monitoringExecutor();
@@ -43,6 +72,12 @@ public class ResourceLimitConfiguration {
         executor.setAwaitTerminationSeconds(shutdownSeconds(properties));
         executor.setRejectedExecutionHandler((task, threadPoolExecutor) -> {
             resourceMetrics.recordExecutorRejection("monitoring");
+            securityEventLogger.log(
+                    SecurityEventType.RESOURCE_SATURATION,
+                    SecurityEventOutcome.REJECTED,
+                    "MONITORING_EXECUTOR",
+                    "/internal/monitoring/executor"
+            );
             throw new RejectedExecutionException(
                     "Executor de monitoramento está saturado"
             );

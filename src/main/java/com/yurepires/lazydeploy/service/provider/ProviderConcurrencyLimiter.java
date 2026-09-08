@@ -4,6 +4,11 @@ import com.yurepires.lazydeploy.config.ProviderProperties;
 import com.yurepires.lazydeploy.exception.ExternalProviderException;
 import com.yurepires.lazydeploy.exception.ExternalProviderFailureCategory;
 import com.yurepires.lazydeploy.service.observability.ExternalProviderMetrics;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -20,12 +25,23 @@ public class ProviderConcurrencyLimiter {
 
     private final Map<String, Semaphore> semaphores = new ConcurrentHashMap<>();
     private final ExternalProviderMetrics metrics;
+    private final SecurityEventLogger securityEventLogger;
 
     public ProviderConcurrencyLimiter(
             ProviderProperties properties,
             ExternalProviderMetrics metrics
     ) {
+        this(properties, metrics, new SecurityEventLogger(new LogSanitizer()));
+    }
+
+    @Autowired
+    public ProviderConcurrencyLimiter(
+            ProviderProperties properties,
+            ExternalProviderMetrics metrics,
+            SecurityEventLogger securityEventLogger
+    ) {
         this.metrics = metrics;
+        this.securityEventLogger = securityEventLogger;
         semaphores.put("GAMETOOLS", new Semaphore(properties.gameTools().maxConcurrentRequests()));
         semaphores.put("BATTLELOG_KEEPER", new Semaphore(properties.keeper().maxConcurrentRequests()));
         semaphores.put("BFLIST", new Semaphore(properties.bflist().maxConcurrentRequests()));
@@ -36,6 +52,12 @@ public class ProviderConcurrencyLimiter {
         boolean acquired = semaphore.tryAcquire();
         if (!acquired) {
             metrics.recordConcurrencyRejection(providerId);
+            securityEventLogger.log(
+                    SecurityEventType.RESOURCE_SATURATION,
+                    SecurityEventOutcome.REJECTED,
+                    "PROVIDER_BULKHEAD",
+                    "/external/provider"
+            );
         }
         return acquired;
     }

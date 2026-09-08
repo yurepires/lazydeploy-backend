@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Métricas agregadas da avaliação e da entrega de notificações.
@@ -31,6 +32,7 @@ public class NotificationMetrics {
     private static final Set<String> DELIVERY_OUTCOMES = Set.of("success", "failed");
 
     private final MeterRegistry meterRegistry;
+    private final AtomicLong successfulDeliveries = new AtomicLong();
 
     public NotificationMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -74,6 +76,9 @@ public class NotificationMetrics {
     }
 
     public void recordDelivery(String channel, String outcome, Duration duration) {
+        if ("success".equalsIgnoreCase(outcome)) {
+            successfulDeliveries.incrementAndGet();
+        }
         if (meterRegistry == null) {
             return;
         }
@@ -96,6 +101,10 @@ public class NotificationMetrics {
         } catch (RuntimeException ignored) {
             // A observabilidade nunca deve interromper as notificações.
         }
+    }
+
+    public long successfulDeliveryCount() {
+        return successfulDeliveries.get();
     }
 
     private String normalizeRuleType(String ruleType) {

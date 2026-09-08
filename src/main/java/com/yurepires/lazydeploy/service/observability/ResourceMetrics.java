@@ -13,6 +13,7 @@ public class ResourceMetrics {
 
     public static final String EXECUTOR_REJECTIONS =
             "lazydeploy.executor.rejections";
+    public static final String SATURATION = "lazydeploy.resources.saturation";
     public static final String EXECUTOR_ACTIVE = "lazydeploy.executor.active";
     public static final String EXECUTOR_POOL_SIZE = "lazydeploy.executor.pool.size";
     public static final String EXECUTOR_QUEUE_SIZE = "lazydeploy.executor.queue.size";
@@ -38,6 +39,11 @@ public class ResourceMetrics {
             Counter.builder(EXECUTOR_REJECTIONS)
                     .tag("executor", normalizeExecutorName(executorName))
                     .description("Tarefas rejeitadas por executors saturados")
+                    .register(meterRegistry)
+                    .increment();
+            Counter.builder(SATURATION)
+                    .tag("resource", "monitoring_executor")
+                    .description("Eventos de saturação de recursos internos")
                     .register(meterRegistry)
                     .increment();
         } catch (RuntimeException ignored) {

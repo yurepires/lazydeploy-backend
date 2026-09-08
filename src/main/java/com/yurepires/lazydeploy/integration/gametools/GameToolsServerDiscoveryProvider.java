@@ -9,6 +9,10 @@ import com.yurepires.lazydeploy.model.server.ServerSearchQuery;
 import com.yurepires.lazydeploy.service.observability.ExternalProviderHealthTracker;
 import com.yurepires.lazydeploy.service.observability.ExternalProviderMetrics;
 import com.yurepires.lazydeploy.service.observability.GameToolsMetrics;
+import com.yurepires.lazydeploy.service.observability.LogSanitizer;
+import com.yurepires.lazydeploy.service.observability.SecurityEventLogger;
+import com.yurepires.lazydeploy.service.observability.SecurityEventOutcome;
+import com.yurepires.lazydeploy.service.observability.SecurityEventType;
 import com.yurepires.lazydeploy.service.provider.ExternalProviderFailureClassifier;
 import com.yurepires.lazydeploy.service.provider.ProviderConcurrencyLimiter;
 import org.slf4j.Logger;
@@ -35,6 +39,7 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
     private final ExternalProviderMetrics providerMetrics;
     private final ProviderConcurrencyLimiter concurrencyLimiter;
     private final ProviderProperties.ProviderSettings settings;
+    private final SecurityEventLogger securityEventLogger;
 
     public GameToolsServerDiscoveryProvider(@Qualifier("gameToolsWebClient") WebClient webClient) {
         this(
@@ -43,7 +48,8 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
                 new ExternalProviderHealthTracker(),
                 ExternalProviderMetrics.noop(),
                 null,
-                ProviderProperties.ProviderSettings.gameToolsDefaults()
+                ProviderProperties.ProviderSettings.gameToolsDefaults(),
+                new SecurityEventLogger(new LogSanitizer())
         );
     }
 
@@ -58,7 +64,8 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
                 healthTracker,
                 ExternalProviderMetrics.noop(),
                 null,
-                ProviderProperties.ProviderSettings.gameToolsDefaults()
+                ProviderProperties.ProviderSettings.gameToolsDefaults(),
+                new SecurityEventLogger(new LogSanitizer())
         );
     }
 
@@ -75,7 +82,8 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
                 healthTracker,
                 providerMetrics,
                 concurrencyLimiter,
-                ProviderProperties.ProviderSettings.gameToolsDefaults()
+                ProviderProperties.ProviderSettings.gameToolsDefaults(),
+                new SecurityEventLogger(new LogSanitizer())
         );
     }
 
@@ -86,7 +94,8 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
             ExternalProviderHealthTracker healthTracker,
             ExternalProviderMetrics providerMetrics,
             ProviderConcurrencyLimiter concurrencyLimiter,
-            ProviderProperties providerProperties
+            ProviderProperties providerProperties,
+            SecurityEventLogger securityEventLogger
     ) {
         this(
                 webClient,
@@ -94,7 +103,8 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
                 healthTracker,
                 providerMetrics,
                 concurrencyLimiter,
-                providerProperties.gameTools()
+                providerProperties.gameTools(),
+                securityEventLogger
         );
     }
 
@@ -104,7 +114,8 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
             ExternalProviderHealthTracker healthTracker,
             ExternalProviderMetrics providerMetrics,
             ProviderConcurrencyLimiter concurrencyLimiter,
-            ProviderProperties.ProviderSettings settings
+            ProviderProperties.ProviderSettings settings,
+            SecurityEventLogger securityEventLogger
     ) {
         this.webClient = webClient;
         this.metrics = metrics;
@@ -112,6 +123,7 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
         this.providerMetrics = providerMetrics;
         this.concurrencyLimiter = concurrencyLimiter;
         this.settings = settings;
+        this.securityEventLogger = securityEventLogger;
     }
 
     @Override
@@ -150,10 +162,7 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
             if (exception.category() == ExternalProviderFailureCategory.TIMEOUT) {
                 providerMetrics.recordTimeout(PROVIDER_ID);
             }
-            log.warn(
-                    "Falha no GameTools | category={}",
-                    exception.category()
-            );
+            logProviderFailure(exception.category(), exception);
             throw exception;
         } catch (RuntimeException exception) {
             ExternalProviderException providerException =
@@ -163,16 +172,34 @@ public class GameToolsServerDiscoveryProvider implements ServerDiscoveryProvider
             if (providerException.category() == ExternalProviderFailureCategory.TIMEOUT) {
                 providerMetrics.recordTimeout(PROVIDER_ID);
             }
-            log.warn(
-                    "Falha ao buscar servidores no GameTools | category={}",
-                    providerException.category()
-            );
+            logProviderFailure(providerException.category(), providerException);
             throw providerException;
         } finally {
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             metrics.recordRequest(outcome, duration);
             providerMetrics.recordRequest(PROVIDER_ID, outcome, duration);
         }
+    }
+
+    private void logProviderFailure(
+            ExternalProviderFailureCategory category,
+            Throwable failure
+    ) {
+        if (category == ExternalProviderFailureCategory.UNKNOWN) {
+            log.error(
+                    "PROVIDER FAILURE | provider=gametools | category={}",
+                    category,
+                    failure
+            );
+        } else {
+            log.warn("PROVIDER FAILURE | provider=gametools | category={}", category);
+        }
+        securityEventLogger.log(
+                SecurityEventType.PROVIDER_FAILURE,
+                SecurityEventOutcome.FAILURE,
+                category == null ? "UNKNOWN" : category.name(),
+                "/external/gametools"
+        );
     }
 
     private GameToolsServersResponse requestServers(ServerSearchQuery query) {

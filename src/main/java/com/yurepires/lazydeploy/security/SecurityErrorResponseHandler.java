@@ -33,6 +33,7 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
         writeResponse(
                 response,
                 HttpStatus.UNAUTHORIZED,
+                "Authentication required",
                 "UNAUTHENTICATED",
                 "Sessão inexistente ou expirada",
                 request.getRequestURI()
@@ -46,15 +47,18 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
             AccessDeniedException exception
     ) throws IOException {
         String errorCode = "ACCESS_DENIED";
+        String title = "Access denied";
         String message = "Acesso negado";
         if (exception instanceof CsrfException) {
             errorCode = "CSRF_VALIDATION_FAILED";
-            message = "Token CSRF inválido ou ausente";
+            title = "Request validation failed";
+            message = "Não foi possível validar a requisição.";
         }
 
         writeResponse(
                 response,
                 HttpStatus.FORBIDDEN,
+                title,
                 errorCode,
                 message,
                 request.getRequestURI()
@@ -64,15 +68,14 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
     private void writeResponse(
             HttpServletResponse response,
             HttpStatus status,
+            String title,
             String code,
             String message,
             String path
     ) throws IOException {
         ProblemDetail problemDetail = ProblemDetailFactory.create(
                 status,
-                status == HttpStatus.UNAUTHORIZED
-                        ? "Authentication required"
-                        : "Access denied",
+                title,
                 message,
                 code,
                 path,

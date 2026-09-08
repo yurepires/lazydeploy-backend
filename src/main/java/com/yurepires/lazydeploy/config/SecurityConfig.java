@@ -17,8 +17,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -29,6 +31,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -107,20 +110,43 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CookieCsrfTokenRepository csrfTokenRepository(
+            CsrfCookieProperties properties
+    ) {
+        CookieCsrfTokenRepository repository =
+                CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookiePath(properties.path());
+        repository.setCookieCustomizer(cookie -> cookie
+                .secure(properties.secure())
+                .httpOnly(properties.httpOnly())
+                .sameSite(properties.sameSite())
+                .path(properties.path())
+        );
+        return repository;
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             SecurityContextRepository securityContextRepository,
             SecurityErrorResponseHandler securityErrorResponseHandler,
+            CookieCsrfTokenRepository csrfTokenRepository,
+            SecurityHeadersProperties securityHeadersProperties,
             RateLimitFilter rateLimitFilter,
             RequestBodyLimitFilter requestBodyLimitFilter
     ) throws Exception {
         http
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(csrfTokenRepository)
                         // Angular envia o token cru do cookie XSRF-TOKEN. O handler XOR
                         // padrão do Spring Security espera um token mascarado diferente.
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                 )
+                .headers(headers -> configureSecurityHeaders(
+                        headers,
+                        securityHeadersProperties
+                ))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 "/api/auth/register",
@@ -176,6 +202,36 @@ public class SecurityConfig {
                 .addFilterBefore(requestBodyLimitFilter, RateLimitFilter.class);
 
         return http.build();
+    }
+
+    private void configureSecurityHeaders(
+            HeadersConfigurer<HttpSecurity> headers,
+            SecurityHeadersProperties properties
+    ) {
+        headers.contentTypeOptions(Customizer.withDefaults());
+        headers.frameOptions(frame -> frame.deny());
+        headers.referrerPolicy(referrer -> referrer.policy(
+                ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN
+        ));
+        headers.contentSecurityPolicy(contentSecurityPolicy -> contentSecurityPolicy
+                .policyDirectives(
+                        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+                )
+        );
+        headers.permissionsPolicyHeader(permissionsPolicy -> permissionsPolicy
+                .policy("camera=(), microphone=(), geolocation=()")
+        );
+        headers.cacheControl(Customizer.withDefaults());
+
+        if (properties.hsts().enabled()) {
+            headers.httpStrictTransportSecurity(hsts -> hsts
+                    .maxAgeInSeconds(properties.hsts().maxAge().toSeconds())
+                    .includeSubDomains(properties.hsts().includeSubDomains())
+                    .preload(properties.hsts().preload())
+            );
+        } else {
+            headers.httpStrictTransportSecurity(hsts -> hsts.disable());
+        }
     }
 
     private void logoutSuccess(

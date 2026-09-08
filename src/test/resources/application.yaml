@@ -76,6 +76,14 @@ info:
 
 server:
   shutdown: graceful
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        secure: false
+        same-site: lax
+        path: /
   tomcat:
     threads:
       max: 10
@@ -128,6 +136,25 @@ lazydeploy:
     max-page-number: 10000
     max-request-body-bytes: 1048576
   security:
+    cors:
+      allowed-origins:
+        - http://localhost:4200
+      allow-credentials: true
+      allowed-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+      allowed-headers: Content-Type,Accept,X-XSRF-TOKEN
+      exposed-headers: Retry-After
+      max-age-seconds: 3600
+    csrf-cookie:
+      secure: false
+      http-only: false
+      same-site: lax
+      path: /
+    headers:
+      hsts:
+        enabled: false
+        max-age: 31536000s
+        include-sub-domains: false
+        preload: false
     rate-limit:
       enabled: true
       login:

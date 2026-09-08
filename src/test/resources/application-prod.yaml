@@ -15,7 +15,6 @@ management:
         enabled: true
 
 server:
-  forward-headers-strategy: framework
   servlet:
     session:
       timeout: 30m
@@ -29,7 +28,7 @@ lazydeploy:
   security:
     cors:
       allowed-origins:
-        - ${LAZYDEPLOY_FRONTEND_ORIGIN}
+        - https://lazydeploy.pages.dev
       allow-credentials: true
       allowed-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
       allowed-headers: Content-Type,Accept,X-XSRF-TOKEN

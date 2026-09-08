@@ -35,8 +35,9 @@ armazena somente o hash da senha e mantém a identidade autenticada em uma sess�
 HTTP no servidor. Os endpoints de negócio obtêm o usuário da sessão atual; não
 aceitam mais `X-User-Id` ou `userId` enviado pelo cliente.
 
-Em produção, defina `SESSION_COOKIE_SECURE=true` quando a aplicação estiver
-atrás de HTTPS.
+Em desenvolvimento, a sessão usa cookie `HttpOnly` com `SameSite=Lax`. Em
+produção, ative o perfil `prod`; ele configura `JSESSIONID` como `HttpOnly`,
+`Secure`, `SameSite=None` e com path `/`, sem definir um domínio compartilhado.
 
 A aplicação também aplica rate limiting em memória antes dos endpoints de
 autenticação e de busca/configuração de subscriptions. Os limites padrão ficam
@@ -114,6 +115,30 @@ nenhum dos dois dispara chamadas ao Keeper, GameTools, BFLIST ou SMTP.
 Endpoints administrativos sensíveis, como `env`, `configprops`, `beans`,
 `mappings`, `heapdump`, `threaddump`, `loggers` e `shutdown`, não são expostos;
 o endpoint de desligamento também está desabilitado explicitamente.
+
+## Segurança HTTP para frontend cross-site
+
+O perfil padrão permite somente `http://localhost:4200` na allowlist CORS. O
+perfil `prod` exige `LAZYDEPLOY_FRONTEND_ORIGIN` e permite apenas essa origem
+exata, sem curingas ou reflexão do header `Origin`. CORS aceita credenciais,
+preflight e os métodos necessários para a API; `/actuator/**` não herda essa
+configuração.
+
+O endpoint `GET /api/auth/csrf` materializa o cookie `XSRF-TOKEN`. Ele é legível
+pelo Angular, enquanto `JSESSIONID` permanece `HttpOnly`. Todas as operações
+mutáveis continuam exigindo `X-XSRF-TOKEN`; uma falha retorna HTTP 403 com
+`CSRF_VALIDATION_FAILED` e uma mensagem genérica. O token CSRF não autentica o
+usuário e nunca substitui a sessão.
+
+No perfil `prod`, o cookie CSRF também usa `Secure` e `SameSite=None`, necessários
+para o cenário Cloudflare Pages + Railway. Isso depende do navegador aceitar
+cookies cross-site; essa limitação deve ser validada em Chrome, Firefox, Edge e
+Safari antes do deploy final.
+
+As respostas recebem `X-Content-Type-Options`, `X-Frame-Options: DENY`,
+`Referrer-Policy`, CSP restritiva para uma API, `Permissions-Policy` mínima e
+`Cache-Control` sem armazenamento. HSTS é habilitado apenas para respostas
+HTTPS do perfil `prod`, sem `includeSubDomains` ou `preload`.
 
 ## API BF4
 

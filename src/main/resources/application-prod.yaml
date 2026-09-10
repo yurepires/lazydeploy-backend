@@ -1,3 +1,36 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    test-connection: false
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:5000}
+      mail.smtp.timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:5000}
+      mail.smtp.writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:5000}
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
+
 management:
   endpoints:
     web:
@@ -24,7 +57,10 @@ logging:
     com.zaxxer.hikari: WARN
 
 server:
+  address: 0.0.0.0
+  port: ${PORT:8080}
   forward-headers-strategy: framework
+  shutdown: graceful
   servlet:
     session:
       timeout: 30m
@@ -35,6 +71,9 @@ server:
         path: /
 
 lazydeploy:
+  game-tools-base-url: ${GAME_TOOLS_BASE_URL:https://api.gametools.network}
+  battlelog-keeper-base-url: ${BATTLELOG_KEEPER_BASE_URL:https://keeper.battlelog.com}
+  email-from: ${MAIL_FROM}
   security:
     cors:
       allowed-origins:
@@ -55,3 +94,7 @@ lazydeploy:
         max-age: 31536000s
         include-sub-domains: false
         preload: false
+    rate-limit:
+      proxy:
+        trust-forwarded-headers: false
+        trusted-proxies: []

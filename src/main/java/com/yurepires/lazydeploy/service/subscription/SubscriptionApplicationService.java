@@ -295,30 +295,27 @@ public class SubscriptionApplicationService {
             UpdateRuleRequest request
     ) {
         ServerSubscription currentSubscription = get(userId, subscriptionId);
-        List<NotificationRuleDefinition> updatedRules = new ArrayList<>();
-        boolean ruleWasFound = false;
+        NotificationRuleDefinition updatedRule = null;
 
         for (NotificationRuleDefinition currentRule : currentSubscription.rules()) {
             if (ruleId.equals(currentRule.id())) {
-                updatedRules.add(createRuleDefinition(
+                updatedRule = createRuleDefinition(
                         ruleId,
                         request.type(),
                         request.enabled(),
                         request.parameters(),
                         currentRule.createdAt(),
                         currentRule.updatedAt()
-                ));
-                ruleWasFound = true;
-            } else {
-                updatedRules.add(currentRule);
+                );
+                break;
             }
         }
 
-        if (!ruleWasFound) {
+        if (updatedRule == null) {
             throw new NotificationRuleNotFoundException();
         }
 
-        return saveWithRules(currentSubscription, updatedRules);
+        return subscriptionPersistenceService.saveRule(currentSubscription, updatedRule);
     }
 
     public ServerSubscription patchRule(
@@ -334,8 +331,7 @@ public class SubscriptionApplicationService {
         }
 
         ServerSubscription currentSubscription = get(userId, subscriptionId);
-        List<NotificationRuleDefinition> updatedRules = new ArrayList<>();
-        boolean ruleWasFound = false;
+        NotificationRuleDefinition updatedRule = null;
 
         for (NotificationRuleDefinition currentRule : currentSubscription.rules()) {
             if (ruleId.equals(currentRule.id())) {
@@ -349,25 +345,23 @@ public class SubscriptionApplicationService {
                     updatedParameters = request.parameters();
                 }
 
-                updatedRules.add(createRuleDefinition(
+                updatedRule = createRuleDefinition(
                         ruleId,
                         updatedType,
                         request.enabled(),
                         updatedParameters,
                         currentRule.createdAt(),
                         currentRule.updatedAt()
-                ));
-                ruleWasFound = true;
-            } else {
-                updatedRules.add(currentRule);
+                );
+                break;
             }
         }
 
-        if (!ruleWasFound) {
+        if (updatedRule == null) {
             throw new NotificationRuleNotFoundException();
         }
 
-        return saveWithRules(currentSubscription, updatedRules);
+        return subscriptionPersistenceService.saveRule(currentSubscription, updatedRule);
     }
 
     public ServerSubscription addChannel(

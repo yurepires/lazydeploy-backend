@@ -6,6 +6,7 @@ import com.yurepires.lazydeploy.entity.NotificationRuleEntity;
 import com.yurepires.lazydeploy.entity.ServerEntity;
 import com.yurepires.lazydeploy.entity.ServerIdentifierEntity;
 import com.yurepires.lazydeploy.entity.ServerSubscriptionEntity;
+import com.yurepires.lazydeploy.exception.NotificationRuleNotFoundException;
 import com.yurepires.lazydeploy.exception.PersistenceMappingException;
 import com.yurepires.lazydeploy.mapper.EncodedParameterValue;
 import com.yurepires.lazydeploy.mapper.ParameterValueMapper;
@@ -172,6 +173,39 @@ public class ServerSubscriptionPersistenceService {
         replaceRules(savedEntity.getId(), rules);
 
         return mapSubscriptionToDomain(savedEntity);
+    }
+
+    @Transactional
+    public ServerSubscription saveRule(
+            ServerSubscription currentSubscription,
+            NotificationRuleDefinition ruleDefinition
+    ) {
+        NotificationRuleEntity existingRule = ruleRepository.findById(ruleDefinition.id())
+                .orElseThrow(NotificationRuleNotFoundException::new);
+
+        if (!currentSubscription.id().equals(existingRule.getSubscriptionId())) {
+            throw new NotificationRuleNotFoundException();
+        }
+
+        Instant currentTime = Instant.now();
+        NotificationRuleEntity ruleEntity = subscriptionMapper.toEntity(
+                ruleDefinition,
+                currentSubscription.id(),
+                existingRule.getCreatedAt(),
+                currentTime
+        );
+
+        ruleParameterRepository.deleteAllByRuleIdIn(List.of(ruleDefinition.id()));
+        ruleRepository.saveAndFlush(ruleEntity);
+        saveRuleParameters(ruleEntity.getId(), ruleDefinition.parameters());
+        subscriptionRepository.updateUpdatedAt(currentSubscription.id(), currentTime);
+
+        ServerSubscriptionEntity subscriptionEntity = subscriptionRepository
+                .findById(currentSubscription.id())
+                .orElseThrow(() -> new PersistenceMappingException(
+                        "Inscrição não foi encontrada: " + currentSubscription.id()
+                ));
+        return mapSubscriptionToDomain(subscriptionEntity);
     }
 
     @Transactional

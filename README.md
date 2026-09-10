@@ -1,5 +1,63 @@
 # LazyDeploy
 
+## Execução com Docker
+
+O `Dockerfile` usa dois estágios: o primeiro compila o JAR com Java 21 e o
+segundo contém somente o runtime Java e o JAR da aplicação. O processo final
+executa com o usuário não-root `lazydeploy`.
+
+Para criar a imagem local:
+
+```shell
+docker build -t lazydeploy-backend:local .
+```
+
+Para executar a imagem usando o perfil de produção, suba primeiro o PostgreSQL
+local e passe as variáveis por fora da imagem. O arquivo `.env` local é
+ignorado pelo Git e não é enviado ao contexto do build:
+
+```shell
+docker compose up -d
+
+docker run --rm --name lazydeploy-backend \
+  --network lazy-deploy_default \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e DATABASE_URL=jdbc:postgresql://postgres:5432/lazydeploy \
+  -e DATABASE_USERNAME=lazydeploy \
+  -e DATABASE_PASSWORD=change-me \
+  -e LAZYDEPLOY_FRONTEND_ORIGIN=https://lazydeploy.pages.dev \
+  -e MAIL_HOST=smtp.example.com \
+  -e MAIL_PORT=587 \
+  -e MAIL_USERNAME=mailer@example.com \
+  -e MAIL_PASSWORD=change-me \
+  -e MAIL_FROM=mailer@example.com \
+  -e PORT=8080 \
+  lazydeploy-backend:local
+```
+
+Em uma rede Docker compartilhada, use o nome do serviço (`postgres`) como host
+do PostgreSQL. O container não recebe código-fonte, Maven, `.git` ou arquivos
+`.env`; as migrations do Flyway continuam sendo executadas no startup.
+
+Variáveis obrigatórias do perfil `prod`:
+
+| Variável | Finalidade |
+| --- | --- |
+| `SPRING_PROFILES_ACTIVE=prod` | Ativa a configuração de produção |
+| `DATABASE_URL` | URL JDBC do PostgreSQL |
+| `DATABASE_USERNAME` | Usuário do PostgreSQL |
+| `DATABASE_PASSWORD` | Senha do PostgreSQL |
+| `LAZYDEPLOY_FRONTEND_ORIGIN` | Origem exata permitida pelo CORS |
+| `MAIL_HOST` | Host SMTP |
+| `MAIL_PORT` | Porta SMTP |
+| `MAIL_USERNAME` | Usuário SMTP |
+| `MAIL_PASSWORD` | Senha SMTP |
+| `MAIL_FROM` | Remetente das notificações |
+
+`PORT` é opcional e usa `8080` quando não for fornecida. Nenhuma dessas
+credenciais deve ser colocada no `Dockerfile`, no repositório ou em argumentos
+de build.
+
 ## Banco de dados local
 
 O PostgreSQL roda no Docker; não é necessário instalar PostgreSQL, `psql` ou pgAdmin no Windows.

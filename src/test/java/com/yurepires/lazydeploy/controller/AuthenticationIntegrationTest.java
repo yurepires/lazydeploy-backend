@@ -122,6 +122,31 @@ class AuthenticationIntegrationTest {
     }
 
     @Test
+    void shouldRotateSessionIdAfterAuthentication() throws Exception {
+        String email = uniqueEmail();
+        register(email, "password-123");
+        MockHttpSession preAuthenticationSession = new MockHttpSession();
+        String preAuthenticationSessionId = preAuthenticationSession.getId();
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .session(preAuthenticationSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody(email, "password-123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").doesNotExist())
+                .andReturn();
+
+        MockHttpSession authenticatedSession = (MockHttpSession) loginResult
+                .getRequest()
+                .getSession(false);
+
+        assertThat(authenticatedSession).isNotNull();
+        assertThat(authenticatedSession.getId())
+                .isNotEqualTo(preAuthenticationSessionId);
+    }
+
+    @Test
     void shouldRejectInvalidCredentialsWithGenericResponse() throws Exception {
         String email = uniqueEmail();
         register(email, "password-123");
@@ -175,6 +200,17 @@ class AuthenticationIntegrationTest {
                         .with(csrf()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void shouldRequireCsrfForLogoutOfAnAuthenticatedSession() throws Exception {
+        String email = uniqueEmail();
+        register(email, "password-123");
+        MockHttpSession session = login(email, "password-123");
+
+        mockMvc.perform(post("/api/auth/logout").session(session))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("CSRF_VALIDATION_FAILED"));
     }
 
     @Test

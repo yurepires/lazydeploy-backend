@@ -22,16 +22,22 @@ public class ProductionConfigurationValidation {
         requireText("spring.datasource.url");
         requireText("spring.datasource.username");
         requireText("spring.datasource.password");
-        requireText("spring.mail.host");
-        requireText("spring.mail.username");
-        requireText("spring.mail.password");
-        requireText("lazydeploy.email-from");
+        requireText("lazydeploy.mailjet.api-key");
+        requireText("lazydeploy.mailjet.api-secret");
+        requireText("lazydeploy.mailjet.from-email");
         requireText("lazydeploy.security.cors.allowed-origins[0]");
 
-        int mailPort = requireInteger("spring.mail.port");
-        if (mailPort < 1 || mailPort > 65_535) {
+        int mailjetConnectTimeout = requireInteger("lazydeploy.mailjet.connect-timeout-ms");
+        if (mailjetConnectTimeout < 1) {
             throw new IllegalStateException(
-                    "A propriedade spring.mail.port deve estar entre 1 e 65535"
+                    "A propriedade lazydeploy.mailjet.connect-timeout-ms deve ser positiva"
+            );
+        }
+
+        int mailjetResponseTimeout = requireInteger("lazydeploy.mailjet.response-timeout-ms");
+        if (mailjetResponseTimeout < 1) {
+            throw new IllegalStateException(
+                    "A propriedade lazydeploy.mailjet.response-timeout-ms deve ser positiva"
             );
         }
 

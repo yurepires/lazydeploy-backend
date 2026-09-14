@@ -8,13 +8,6 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
-  mail:
-    host: localhost
-    port: 2525
-    username: test-user
-    password: test-password
-    test-connection: false
-
 management:
   endpoints:
     web:
@@ -44,7 +37,15 @@ server:
         path: /
 
 lazydeploy:
-  email-from: test@example.com
+  mailjet:
+    base-url: https://api.mailjet.com
+    api-key: test-api-key
+    api-secret: test-api-secret
+    from-email: test@example.com
+    from-name: LazyDeploy Test
+    connect-timeout-ms: 3000
+    response-timeout-ms: 10000
+    max-response-body-bytes: 1048576
   security:
     cors:
       allowed-origins:

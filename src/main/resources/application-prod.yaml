@@ -15,19 +15,6 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
-  mail:
-    host: ${MAIL_HOST}
-    port: ${MAIL_PORT}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
-    test-connection: false
-    properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
-      mail.smtp.starttls.required: true
-      mail.smtp.connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:5000}
-      mail.smtp.timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:5000}
-      mail.smtp.writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:5000}
   lifecycle:
     timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
 
@@ -73,7 +60,15 @@ server:
 lazydeploy:
   game-tools-base-url: ${GAME_TOOLS_BASE_URL:https://api.gametools.network}
   battlelog-keeper-base-url: ${BATTLELOG_KEEPER_BASE_URL:https://keeper.battlelog.com}
-  email-from: ${MAIL_FROM}
+  mailjet:
+    base-url: ${MAILJET_BASE_URL:https://api.mailjet.com}
+    api-key: ${MAILJET_API_KEY}
+    api-secret: ${MAILJET_API_SECRET}
+    from-email: ${MAILJET_FROM_EMAIL}
+    from-name: ${MAILJET_FROM_NAME:LazyDeploy}
+    connect-timeout-ms: ${MAILJET_CONNECT_TIMEOUT_MS:3000}
+    response-timeout-ms: ${MAILJET_RESPONSE_TIMEOUT_MS:10000}
+    max-response-body-bytes: ${MAILJET_MAX_RESPONSE_BODY_BYTES:1048576}
   security:
     cors:
       allowed-origins:

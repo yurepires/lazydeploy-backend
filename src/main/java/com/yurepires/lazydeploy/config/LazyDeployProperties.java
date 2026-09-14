@@ -6,6 +6,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record LazyDeployProperties(
         MonitoringProperties monitoring,
         String gameToolsBaseUrl,
-        String battlelogKeeperBaseUrl,
-        String emailFrom
+        String battlelogKeeperBaseUrl
 ) {}

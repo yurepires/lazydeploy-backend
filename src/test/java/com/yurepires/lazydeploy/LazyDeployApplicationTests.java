@@ -22,7 +22,6 @@ class LazyDeployApplicationTests {
         assertThat(properties.monitoring().roundResetThresholdSeconds()).isEqualTo(30);
         assertThat(properties.battlelogKeeperBaseUrl()).contains("battlelog.com");
         assertThat(properties.gameToolsBaseUrl()).contains("gametools.network");
-        assertThat(properties.emailFrom()).isEqualTo("test@example.com");
     }
 
 }

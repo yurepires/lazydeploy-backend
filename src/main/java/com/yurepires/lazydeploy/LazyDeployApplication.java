@@ -1,6 +1,7 @@
 package com.yurepires.lazydeploy;
 
 import com.yurepires.lazydeploy.config.LazyDeployProperties;
+import com.yurepires.lazydeploy.config.MailjetProperties;
 import com.yurepires.lazydeploy.config.BusinessLimitProperties;
 import com.yurepires.lazydeploy.config.CorsProperties;
 import com.yurepires.lazydeploy.config.CsrfCookieProperties;
@@ -17,6 +18,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @EnableConfigurationProperties({
         LazyDeployProperties.class,
+        MailjetProperties.class,
         RateLimitProperties.class,
         BusinessLimitProperties.class,
         ProviderProperties.class,

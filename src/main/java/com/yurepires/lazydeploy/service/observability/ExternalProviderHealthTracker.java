@@ -23,7 +23,8 @@ public class ExternalProviderHealthTracker {
             "GAMETOOLS",
             "BATTLELOG_KEEPER",
             "KEEPER",
-            "BFLIST"
+            "BFLIST",
+            "MAILJET"
     );
 
     private final Clock clock;

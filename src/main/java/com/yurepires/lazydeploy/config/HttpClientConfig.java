@@ -54,6 +54,17 @@ public class HttpClientConfig {
     }
 
     @Bean
+    @Qualifier("mailjetWebClient")
+    public WebClient mailjetWebClient(MailjetProperties properties) {
+        return createClient(
+                properties.baseUrl(),
+                properties.connectTimeoutMs(),
+                properties.responseTimeoutMs(),
+                properties.maxResponseBodyBytes()
+        );
+    }
+
+    @Bean
     public Clock clock() {
         return Clock.systemUTC();
     }
@@ -62,16 +73,30 @@ public class HttpClientConfig {
             String baseUrl,
             ProviderProperties.ProviderSettings settings
     ) {
+        return createClient(
+                baseUrl,
+                settings.connectTimeoutMs(),
+                settings.responseTimeoutMs(),
+                settings.maxResponseBodyBytes()
+        );
+    }
+
+    private WebClient createClient(
+            String baseUrl,
+            int connectTimeoutMs,
+            int responseTimeoutMs,
+            long maxResponseBodyBytes
+    ) {
         HttpClient httpClient = HttpClient.create()
                 .option(
                         ChannelOption.CONNECT_TIMEOUT_MILLIS,
-                        settings.connectTimeoutMs()
+                        connectTimeoutMs
                 )
-                .responseTimeout(Duration.ofMillis(settings.responseTimeoutMs()));
+                .responseTimeout(Duration.ofMillis(responseTimeoutMs));
 
         ExchangeStrategies exchangeStrategies = ExchangeStrategies.builder()
                 .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(
-                        toInteger(settings.maxResponseBodyBytes())
+                        toInteger(maxResponseBodyBytes)
                 ))
                 .build();
 

@@ -137,7 +137,8 @@ public class NotificationPersistenceService {
             return "DELIVERY_TIMEOUT";
         }
         if (normalizedMessage.contains("authentication")
-                || normalizedMessage.contains("smtp")) {
+                || normalizedMessage.contains("smtp")
+                || normalizedMessage.contains("mailjet")) {
             return "MAIL_SEND_FAILED";
         }
         if (normalizedMessage.contains("connect")
@@ -236,7 +237,8 @@ public class NotificationPersistenceService {
         String normalizedMessage = sanitizedMessage.toLowerCase(Locale.ROOT);
         if (normalizedMessage.contains("smtp")
                 || normalizedMessage.contains("authentication failed")
-                || normalizedMessage.contains("mail server connection failed")) {
+                || normalizedMessage.contains("mail server connection failed")
+                || normalizedMessage.contains("mailjet")) {
             return "Falha ao conectar ou autenticar no canal de e-mail";
         }
         if (normalizedMessage.contains("timed out")

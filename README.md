@@ -26,11 +26,10 @@ docker run --rm --name lazydeploy-backend \
   -e DATABASE_USERNAME=lazydeploy \
   -e DATABASE_PASSWORD=change-me \
   -e LAZYDEPLOY_FRONTEND_ORIGIN=https://lazydeploy.pages.dev \
-  -e MAIL_HOST=smtp.example.com \
-  -e MAIL_PORT=587 \
-  -e MAIL_USERNAME=mailer@example.com \
-  -e MAIL_PASSWORD=change-me \
-  -e MAIL_FROM=mailer@example.com \
+  -e MAILJET_API_KEY=change-me \
+  -e MAILJET_API_SECRET=change-me \
+  -e MAILJET_FROM_EMAIL=mailer@example.com \
+  -e MAILJET_FROM_NAME=LazyDeploy \
   -e PORT=8080 \
   lazydeploy-backend:local
 ```
@@ -48,11 +47,10 @@ Variáveis obrigatórias do perfil `prod`:
 | `DATABASE_USERNAME` | Usuário do PostgreSQL |
 | `DATABASE_PASSWORD` | Senha do PostgreSQL |
 | `LAZYDEPLOY_FRONTEND_ORIGIN` | Origem exata permitida pelo CORS |
-| `MAIL_HOST` | Host SMTP |
-| `MAIL_PORT` | Porta SMTP |
-| `MAIL_USERNAME` | Usuário SMTP |
-| `MAIL_PASSWORD` | Senha SMTP |
-| `MAIL_FROM` | Remetente das notificações |
+| `MAILJET_API_KEY` | Chave pública da API do Mailjet |
+| `MAILJET_API_SECRET` | Chave secreta da API do Mailjet |
+| `MAILJET_FROM_EMAIL` | Endereço de remetente validado no Mailjet |
+| `MAILJET_FROM_NAME` | Nome exibido como remetente |
 
 `PORT` é opcional e usa `8080` quando não for fornecida. Nenhuma dessas
 credenciais deve ser colocada no `Dockerfile`, no repositório ou em argumentos
@@ -148,9 +146,9 @@ em `lazydeploy.executor.rejections` e
 O servidor Tomcat usa limites finitos para threads, conexões, fila de aceite e
 timeout de conexão. O desligamento do Spring Boot é gracioso e aguarda apenas
 o tempo configurado em `SHUTDOWN_TIMEOUT` (20 segundos por padrão). Os
-timeouts SMTP também são finitos e podem ser ajustados pelas variáveis
-`MAIL_SMTP_CONNECTION_TIMEOUT_MS`, `MAIL_SMTP_READ_TIMEOUT_MS` e
-`MAIL_SMTP_WRITE_TIMEOUT_MS`.
+timeouts HTTP do Mailjet também são finitos e podem ser ajustados pelas
+variáveis `MAILJET_CONNECT_TIMEOUT_MS`, `MAILJET_RESPONSE_TIMEOUT_MS` e
+`MAILJET_MAX_RESPONSE_BODY_BYTES`.
 
 Como a autenticação utiliza cookies, operações mutáveis exigem token CSRF. Para
 testes manuais, faça primeiro `GET /api/auth/csrf`, envie o cookie recebido e
@@ -168,7 +166,7 @@ Para executar em produção, ative explicitamente o perfil `prod` com
 grupos `liveness`/`readiness` ficam expostos; os detalhes e componentes são
 ocultados, enquanto `info` e `metrics` deixam de ser endpoints web. O liveness
 usa apenas o estado do processo e o readiness pode verificar o banco, mas
-nenhum dos dois dispara chamadas ao Keeper, GameTools, BFLIST ou SMTP.
+nenhum dos dois dispara chamadas ao Keeper, GameTools, BFLIST ou Mailjet.
 
 Endpoints administrativos sensíveis, como `env`, `configprops`, `beans`,
 `mappings`, `heapdump`, `threaddump`, `loggers` e `shutdown`, não são expostos;

@@ -262,7 +262,8 @@ public class NotificationOrchestrator {
 
         String normalizedMessage = sanitizedMessage.toLowerCase(Locale.ROOT);
         if (normalizedMessage.contains("smtp")
-                || normalizedMessage.contains("authentication failed")) {
+                || normalizedMessage.contains("authentication failed")
+                || normalizedMessage.contains("mailjet")) {
             return "falha de conexão ou autenticação no canal de e-mail";
         }
 

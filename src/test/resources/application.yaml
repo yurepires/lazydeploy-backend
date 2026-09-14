@@ -95,7 +95,15 @@ server:
 lazydeploy:
   game-tools-base-url: https://api.gametools.network
   battlelog-keeper-base-url: https://keeper.battlelog.com
-  email-from: test@example.com
+  mailjet:
+    base-url: https://api.mailjet.com
+    api-key: test-api-key
+    api-secret: test-api-secret
+    from-email: test@example.com
+    from-name: LazyDeploy Test
+    connect-timeout-ms: 3000
+    response-timeout-ms: 10000
+    max-response-body-bytes: 1048576
   providers:
     game-tools:
       connect-timeout-ms: 2000

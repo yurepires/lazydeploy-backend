@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @Component("mail")
 public class MailHealthIndicator implements HealthIndicator {
 
-    public static final String PROVIDER_ID = "MAIL";
+    public static final String PROVIDER_ID = "MAILJET";
 
     private final ExternalProviderHealthTracker healthTracker;
 

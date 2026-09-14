@@ -1,259 +1,405 @@
-# LazyDeploy
+# LazyDeploy — Backend
 
-## Execução com Docker
+Backend da plataforma LazyDeploy, uma aplicação que monitora servidores de
+Battlefield 4 e envia notificações quando as condições configuradas pelo
+usuário são atendidas.
 
-O `Dockerfile` usa dois estágios: o primeiro compila o JAR com Java 21 e o
-segundo contém somente o runtime Java e o JAR da aplicação. O processo final
-executa com o usuário não-root `lazydeploy`.
+O projeto demonstra uma API REST segura, integrações com serviços externos,
+monitoramento agendado, persistência relacional, autenticação por sessão e um
+fluxo completo de notificações.
 
-Para criar a imagem local:
+## Visão geral
 
-```shell
-docker build -t lazydeploy-backend:local .
-```
+O backend é responsável por:
 
-Para executar a imagem usando o perfil de produção, suba primeiro o PostgreSQL
-local e passe as variáveis por fora da imagem. O arquivo `.env` local é
-ignorado pelo Git e não é enviado ao contexto do build:
+- Autenticar usuários e manter a sessão com cookie HTTP;
+- Cadastrar subscriptions de servidores monitorados;
+- Consultar servidores e mapas nos providers externos;
+- Avaliar regras de mapa e quantidade mínima de jogadores;
+- Detectar mudanças de mapa;
+- Enviar notificações por email através do Mailjet;
+- Persistir tentativas e resultados no histórico;
+- Expor endpoints de saúde, métricas e observabilidade;
+- Aplicar limites de segurança e de uso da API.
 
-```shell
-docker compose up -d
+A busca de servidores utiliza os providers GameTools e Battlelog Keeper configurados em `integration`.
 
-docker run --rm --name lazydeploy-backend \
-  --network lazy-deploy_default \
-  -e SPRING_PROFILES_ACTIVE=prod \
-  -e DATABASE_URL=jdbc:postgresql://postgres:5432/lazydeploy \
-  -e DATABASE_USERNAME=lazydeploy \
-  -e DATABASE_PASSWORD=change-me \
-  -e LAZYDEPLOY_FRONTEND_ORIGIN=https://lazydeploy.pages.dev \
-  -e MAILJET_API_KEY=change-me \
-  -e MAILJET_API_SECRET=change-me \
-  -e MAILJET_FROM_EMAIL=mailer@example.com \
-  -e MAILJET_FROM_NAME=LazyDeploy \
-  -e PORT=8080 \
-  lazydeploy-backend:local
-```
+## Demonstração e repositórios relacionados
 
-Em uma rede Docker compartilhada, use o nome do serviço (`postgres`) como host
-do PostgreSQL. O container não recebe código-fonte, Maven, `.git` ou arquivos
-`.env`; as migrations do Flyway continuam sendo executadas no startup.
+- Aplicação: [lazydeploy.pages.dev](https://lazydeploy.pages.dev)
+- Frontend: [github.com/yurepires/lazydeploy-frontend](https://github.com/yurepires/lazydeploy-frontend)
+- Backend: [github.com/yurepires/lazydeploy-backend](https://github.com/yurepires/lazydeploy-backend)
 
-Variáveis obrigatórias do perfil `prod`:
+## Stack
 
-| Variável | Finalidade |
+| Categoria | Tecnologia |
 | --- | --- |
-| `SPRING_PROFILES_ACTIVE=prod` | Ativa a configuração de produção |
-| `DATABASE_URL` | URL JDBC do PostgreSQL |
-| `DATABASE_USERNAME` | Usuário do PostgreSQL |
-| `DATABASE_PASSWORD` | Senha do PostgreSQL |
-| `LAZYDEPLOY_FRONTEND_ORIGIN` | Origem exata permitida pelo CORS |
-| `MAILJET_API_KEY` | Chave pública da API do Mailjet |
-| `MAILJET_API_SECRET` | Chave secreta da API do Mailjet |
-| `MAILJET_FROM_EMAIL` | Endereço de remetente validado no Mailjet |
-| `MAILJET_FROM_NAME` | Nome exibido como remetente |
+| Linguagem | Java 21 |
+| Framework | Spring Boot 4.1 |
+| API HTTP | Spring MVC |
+| Persistência | Spring Data JPA + Hibernate |
+| Banco de dados | PostgreSQL |
+| Migrations | Flyway |
+| Segurança | Spring Security, sessão HTTP e CSRF |
+| Integrações | GameTools, Battlelog Keeper e Mailjet |
+| Mapeamentos | MapStruct |
+| Rate limiting | Bucket4j + Caffeine |
+| Build | Maven |
+| Empacotamento | Docker multi-stage |
 
-`PORT` é opcional e usa `8080` quando não for fornecida. Nenhuma dessas
-credenciais deve ser colocada no `Dockerfile`, no repositório ou em argumentos
-de build.
+## Arquitetura
 
-## Banco de dados local
+```text
+HTTP Controller
+      |
+      v
+Application Service
+      |
+      +--> Repository / PostgreSQL
+      +--> Integrações externas
+      |      +--> GameTools
+      |      +--> Battlelog Keeper
+      |      +--> Mailjet
+      |
+      +--> Scheduler de monitoramento
+             |
+             +--> Snapshot dos servidores
+             +--> Avaliação das regras
+             +--> Orquestração de notificações
+             +--> Histórico de tentativas
+```
 
-O PostgreSQL roda no Docker; não é necessário instalar PostgreSQL, `psql` ou pgAdmin no Windows.
+Cada ciclo de monitoramento obtém um snapshot dos servidores, localiza as
+subscriptions ativas, compara o estado anterior e cria uma notificação apenas
+quando uma mudança atende às regras configuradas.
 
-1. Copie `.env.example` para `.env` e altere a senha.
-2. Suba o banco:
+## Pré-requisitos
 
-   ```shell
-   docker compose up -d
-   ```
+- Java 21;
+- Docker e Docker Compose;
+- Uma conta no Mailjet para envio de emails;
+- PostgreSQL local ou uma instância PostgreSQL acessível pela aplicação.
 
-3. Exporte `DATABASE_URL`, `DATABASE_USERNAME` e `DATABASE_PASSWORD` com os mesmos valores do `.env`.
-4. Inicie a aplicação. O Flyway aplicará as migrations e o Hibernate validará o schema.
+O Maven Wrapper já está incluído no repositório. Não é necessário instalar o
+Maven separadamente.
 
-Para inspecionar o banco pelo próprio container:
+## Configuração local
 
-```shell
+### 1. Criar o ambiente do banco
+
+Copie o arquivo de exemplo e altere os valores locais:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+O arquivo `.env` é utilizado pelo Docker Compose para iniciar o PostgreSQL e
+não deve ser commitado.
+
+### 2. Iniciar o PostgreSQL
+
+```powershell
+docker compose up -d
+docker compose ps
+```
+
+O Compose sobe somente o banco de dados. Para abrir o `psql` dentro do container:
+
+```powershell
 docker exec -it lazydeploy-postgres psql -U lazydeploy -d lazydeploy
 ```
 
-O volume `lazydeploy_postgres_data` mantém os dados após reinícios do container.
+### 3. Definir as variáveis da aplicação
 
-## Autenticação
+No PowerShell, as variáveis mínimas para executar localmente são:
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `GET /api/auth/csrf`
+```powershell
+$env:DATABASE_URL = "jdbc:postgresql://localhost:5432/lazydeploy"
+$env:DATABASE_USERNAME = "lazydeploy"
+$env:DATABASE_PASSWORD = "change-me"
+$env:SPRING_PROFILES_ACTIVE = "default"
+```
 
-O cadastro e o login utilizam email e senha. A aplicação normaliza o email,
-armazena somente o hash da senha e mantém a identidade autenticada em uma sessão
-HTTP no servidor. Os endpoints de negócio obtêm o usuário da sessão atual; não
-aceitam mais `X-User-Id` ou `userId` enviado pelo cliente.
+O `.env` do Docker Compose não é carregado automaticamente pelo IntelliJ ou
+pelo Spring Boot. Na IDE, configure essas variáveis na Run Configuration.
 
-Em desenvolvimento, a sessão usa cookie `HttpOnly` com `SameSite=Lax`. Em
-produção, ative o perfil `prod`; ele configura `JSESSIONID` como `HttpOnly`,
-`Secure`, `SameSite=None` e com path `/`, sem definir um domínio compartilhado.
+### 4. Iniciar a aplicação
 
-A aplicação também aplica rate limiting em memória antes dos endpoints de
-autenticação e de busca/configuração de subscriptions. Os limites padrão ficam
-em `lazydeploy.security.rate-limit` no `application.yaml`: login por IP e por
-email normalizado, cadastro por IP, busca por usuário/IP e configuração por
-usuário/IP. O cache possui tamanho máximo e expiração por inatividade; em uma
-implantação com várias instâncias será necessário trocar esse armazenamento por
-um backend compartilhado.
+```powershell
+.\mvnw.cmd spring-boot:run
+```
 
-Quando um limite é atingido, a API responde HTTP 429 com `Content-Type:
-application/problem+json` e o header `Retry-After`, sem indicar se o bloqueio
-foi causado pelo IP ou pelo email.
+Ao iniciar, o Flyway executa as migrations pendentes e o Hibernate valida o
+schema existente. A aplicação fica disponível em `http://localhost:8080`.
 
-Os limites de negócio ficam em `lazydeploy.limits`: por padrão, cada usuário
-possui até 20 subscriptions, cada alerta até 10 regras e 5 canais, e uma regra
-`MAP_IN` aceita até 20 mapas. Consultas de servidores aceitam entre 2 e 100
-caracteres. O histórico usa páginas de até 100 itens e rejeita páginas acima de
-10.000. Corpos JSON da API são limitados a 1 MiB. Esses valores podem ser
-ajustados no arquivo de configuração sem recompilar a aplicação.
+## Variáveis de ambiente
 
-Por padrão, cabeçalhos `X-Forwarded-For` são ignorados. Só habilite
-`lazydeploy.security.rate-limit.proxy.trust-forwarded-headers` quando a
-aplicação estiver atrás de um proxy conhecido e preencha
-`trusted-proxies` com os endereços desse proxy.
+### Banco e servidor
 
-As integrações externas usam políticas independentes em
-`lazydeploy.providers`. Cada provider possui timeout de conexão, timeout de
-resposta, limite de chamadas simultâneas e uma política de retry. O GameTools
-não faz retry para manter a busca interativa rápida; o Keeper pode fazer uma
-segunda tentativa apenas em timeout, falha de conexão ou erro 5xx. Quando o
-limite de concorrência do GameTools é atingido, a API responde HTTP 503 com
-`EXTERNAL_PROVIDER_BUSY`; as demais falhas externas usam
-`EXTERNAL_PROVIDER_UNAVAILABLE`.
+| Variável | Obrigatória | Finalidade |
+| --- | --- | --- |
+| `DATABASE_URL` | Sim | URL JDBC do PostgreSQL |
+| `DATABASE_USERNAME` | Sim | Usuário do PostgreSQL |
+| `DATABASE_PASSWORD` | Sim | Senha do PostgreSQL |
+| `PORT` | Não | Porta HTTP; padrão `8080` |
+| `SPRING_PROFILES_ACTIVE` | Não | Use `prod` em produção |
+| `LAZYDEPLOY_FRONTEND_ORIGIN` | Em produção | Origem exata liberada pelo CORS |
 
-As métricas agregadas dos providers ficam disponíveis pelo Actuator em
-`lazydeploy.provider.requests`, `lazydeploy.provider.duration`,
-`lazydeploy.provider.timeouts`, `lazydeploy.provider.concurrency_rejections` e
-`lazydeploy.provider.retries`, sempre com tags de provider e resultado de baixa
-cardinalidade.
+### Mailjet
 
-Os recursos internos também possuem limites explícitos em
-`lazydeploy.resources`: o pool Hikari usa tamanho máximo, mínimo de conexões
-ociosas e timeouts finitos; o executor do monitoramento tem pool e fila
-limitados; e o scheduler executa um único trigger por vez. O ciclo de
-monitoramento usa uma política single-flight, portanto um ciclo lento não gera
-uma fila ilimitada de novos ciclos. Rejeições e ciclos ignorados são expostos
-em `lazydeploy.executor.rejections` e
-`lazydeploy.monitoring.cycles.skipped`.
+| Variável | Obrigatória | Finalidade |
+| --- | --- | --- |
+| `MAILJET_API_KEY` | Em produção | Chave pública da API |
+| `MAILJET_API_SECRET` | Em produção | Chave secreta da API |
+| `MAILJET_FROM_EMAIL` | Em produção | Remetente validado no Mailjet |
+| `MAILJET_FROM_NAME` | Não | Nome exibido no remetente |
+| `MAILJET_BASE_URL` | Não | URL base da API |
+| `MAILJET_CONNECT_TIMEOUT_MS` | Não | Timeout de conexão |
+| `MAILJET_RESPONSE_TIMEOUT_MS` | Não | Timeout de resposta |
+| `MAILJET_MAX_RESPONSE_BODY_BYTES` | Não | Limite do corpo retornado |
 
-O servidor Tomcat usa limites finitos para threads, conexões, fila de aceite e
-timeout de conexão. O desligamento do Spring Boot é gracioso e aguarda apenas
-o tempo configurado em `SHUTDOWN_TIMEOUT` (20 segundos por padrão). Os
-timeouts HTTP do Mailjet também são finitos e podem ser ajustados pelas
-variáveis `MAILJET_CONNECT_TIMEOUT_MS`, `MAILJET_RESPONSE_TIMEOUT_MS` e
-`MAILJET_MAX_RESPONSE_BODY_BYTES`.
+`MAILJET_FROM_EMAIL` deve ser exatamente um remetente autorizado no Mailjet.
+O destinatário é o email da conta proprietária da subscription.
 
-Como a autenticação utiliza cookies, operações mutáveis exigem token CSRF. Para
-testes manuais, faça primeiro `GET /api/auth/csrf`, envie o cookie recebido e
-repita o valor no header `X-XSRF-TOKEN`.
+Limites de banco, executor, Tomcat, rate limiting e regras de negócio podem ser
+ajustados no `application.yaml` e pelas variáveis documentadas em
+`.env.example`.
 
-## Actuator e health checks
+## Execução com Docker
 
-Os endpoints de gerenciamento permanecem fora de `/api`, no namespace
-`/actuator`. O perfil padrão de desenvolvimento expõe `health`, `info` e
-`metrics`; `health` é público e `info`/`metrics` exigem um usuário com a role
-`ADMIN`. Detalhes de health só aparecem para usuários autorizados.
+O `Dockerfile` usa dois estágios: uma imagem Maven com Java 21 para compilar o
+JAR e uma imagem menor com apenas o runtime Java e a aplicação. O processo
+final executa com o usuário não-root `lazydeploy` e expõe a porta 8080.
 
-Para executar em produção, ative explicitamente o perfil `prod` com
-`SPRING_PROFILES_ACTIVE=prod`. Nesse perfil somente `GET /actuator/health` e os
-grupos `liveness`/`readiness` ficam expostos; os detalhes e componentes são
-ocultados, enquanto `info` e `metrics` deixam de ser endpoints web. O liveness
-usa apenas o estado do processo e o readiness pode verificar o banco, mas
-nenhum dos dois dispara chamadas ao Keeper, GameTools, BFLIST ou Mailjet.
+```powershell
+docker build -t lazydeploy-backend:local .
+```
 
-Endpoints administrativos sensíveis, como `env`, `configprops`, `beans`,
-`mappings`, `heapdump`, `threaddump`, `loggers` e `shutdown`, não são expostos;
-o endpoint de desligamento também está desabilitado explicitamente.
+Para executar o backend junto do banco local, use o nome do serviço Docker,
+`postgres`, como host:
 
-## Segurança HTTP para frontend cross-site
+```powershell
+docker compose up -d
 
-O perfil padrão permite somente `http://localhost:4200` na allowlist CORS. O
-perfil `prod` exige `LAZYDEPLOY_FRONTEND_ORIGIN` e permite apenas essa origem
-exata, sem curingas ou reflexão do header `Origin`. CORS aceita credenciais,
-preflight e os métodos necessários para a API; `/actuator/**` não herda essa
-configuração.
+docker run --rm --name lazydeploy-backend `
+  --network lazy-deploy_default `
+  -e SPRING_PROFILES_ACTIVE=prod `
+  -e DATABASE_URL=jdbc:postgresql://postgres:5432/lazydeploy `
+  -e DATABASE_USERNAME=lazydeploy `
+  -e DATABASE_PASSWORD=change-me `
+  -e LAZYDEPLOY_FRONTEND_ORIGIN=https://lazydeploy.pages.dev `
+  -e MAILJET_API_KEY=change-me `
+  -e MAILJET_API_SECRET=change-me `
+  -e MAILJET_FROM_EMAIL=mailer@example.com `
+  -e MAILJET_FROM_NAME=LazyDeploy `
+  -e PORT=8080 `
+  lazydeploy-backend:local
+```
 
-O endpoint `GET /api/auth/csrf` materializa o cookie `XSRF-TOKEN`. Ele é legível
-pelo Angular, enquanto `JSESSIONID` permanece `HttpOnly`. Todas as operações
-mutáveis continuam exigindo `X-XSRF-TOKEN`; uma falha retorna HTTP 403 com
-`CSRF_VALIDATION_FAILED` e uma mensagem genérica. O token CSRF não autentica o
-usuário e nunca substitui a sessão.
+## Autenticação e segurança
 
-No perfil `prod`, o cookie CSRF também usa `Secure` e `SameSite=None`, necessários
-para o cenário Cloudflare Pages + Railway. Isso depende do navegador aceitar
-cookies cross-site; essa limitação deve ser validada em Chrome, Firefox, Edge e
-Safari antes do deploy final.
+A autenticação usa sessão HTTP no servidor:
 
-As respostas recebem `X-Content-Type-Options`, `X-Frame-Options: DENY`,
-`Referrer-Policy`, CSP restritiva para uma API, `Permissions-Policy` mínima e
-`Cache-Control` sem armazenamento. HSTS é habilitado apenas para respostas
-HTTPS do perfil `prod`, sem `includeSubDomains` ou `preload`.
+- `JSESSIONID` identifica a sessão autenticada e é `HttpOnly`;
+- `XSRF-TOKEN` é disponibilizado para o frontend;
+- operações mutáveis exigem o header `X-XSRF-TOKEN`;
+- endpoints de negócio identificam o usuário pela sessão, nunca por um
+  `userId` enviado pelo cliente;
+- em produção, cookies usam `Secure` e `SameSite=None` para frontend e backend
+  em origens diferentes.
 
-## API BF4
+Endpoints públicos:
 
-- `GET /api/bf4/servers/search?query=<nome>&limit=20`
-- `GET /api/bf4/maps`
-- `GET /api/bf4/maps/{mapId}`
-- `GET /api/bf4/notifications`
-- `GET /api/bf4/notifications/{notificationId}`
-- `GET /api/bf4/subscriptions/{id}/notifications`
-- `POST /api/bf4/subscriptions`
-- `GET /api/bf4/subscriptions`
-- `GET /api/bf4/subscriptions/{id}`
-- `PUT|PATCH /api/bf4/subscriptions/{id}`
-- `DELETE /api/bf4/subscriptions/{id}`
-- `GET|POST /api/bf4/subscriptions/{id}/rules`
-- `GET|PUT|PATCH|DELETE /api/bf4/subscriptions/{id}/rules/{ruleId}`
-- `GET|POST /api/bf4/subscriptions/{id}/channels`
-- `GET|PUT|PATCH|DELETE /api/bf4/subscriptions/{id}/channels/{channelId}`
+```text
+GET  /api/auth/csrf
+POST /api/auth/register
+POST /api/auth/login
+```
 
-As respostas de erro seguem o formato RFC 9457 (`ProblemDetail`), com os campos
-`errorCode`, `timestamp` e, quando aplicável, `fieldErrors`. Os tipos de regra
-disponíveis são `MAP_IN` e `PLAYER_COUNT_AT_LEAST`; o canal disponível nesta fase
-é `EMAIL`, sem parâmetros, cujo destino é sempre o endereço de email da conta
-proprietária.
-Ao criar ou atualizar esse canal, envie apenas `type` e `enabled`; qualquer
-parâmetro, incluindo `recipient`, é rejeitado.
+Endpoints que exigem sessão:
 
-O catálogo de mapas retorna somente mapas habilitados e ordenados pelo nome
-amigável. As regras `MAP_IN` continuam armazenando o identificador técnico (por
-exemplo, `MP_Prison`); o catálogo é usado para validação e apresentação. Se o
-Keeper enviar um mapa ainda não catalogado, o monitoramento continua e usa o
-próprio identificador técnico como nome de exibição.
+```text
+POST /api/auth/logout
+GET  /api/auth/me
+GET  /api/bf4/**
+```
 
-O histórico de notificações é somente leitura e sempre pertence ao usuário da
-sessão atual. Os endpoints aceitam `page` (inicia em 0), `size` (padrão 20,
-máximo 100), `status`, `channel`, `mapId`, `serverId`, `subscriptionId`, `from`
-e `to`. A ordenação padrão é `attemptedAt` decrescente; também são aceitos
-`sentAt`, `status` e `channelType`. O histórico mantém um snapshot do servidor,
-mapa e jogadores no momento da tentativa, inclusive quando a entrega falha.
-Os limites `from` e `to` são inclusivos.
-Quando uma inscrição é removida, as tentativas permanecem preservadas; a
-referência da inscrição pode ficar nula, mas o histórico continua vinculado ao
-usuário que originou a tentativa.
+A aplicação também aplica rate limiting por IP, email normalizado e usuário,
+limite de 1 MiB para corpos JSON, limites de negócio, headers de segurança,
+CSP, HSTS em produção, CORS restrito e tratamento global de exceções com
+respostas RFC 9457 (`ProblemDetail`).
 
-Os endpoints `POST /api/auth/register`, `POST /api/auth/login` e
-`GET /api/auth/csrf` são públicos. `POST /api/auth/logout` e `GET /api/auth/me`
-exigem uma sessão autenticada. Todos os demais endpoints em `/api/bf4/**`
-continuam exigindo autenticação.
+Em produção, apenas health, liveness e readiness do Actuator são expostos.
+`info` e `metrics`, quando habilitados no ambiente de desenvolvimento, exigem
+a role `ADMIN`.
+
+## API principal
+
+### Servidores, mapas e notificações
+
+```text
+GET /api/bf4/servers/search?query=<nome>&limit=20
+GET /api/bf4/maps
+GET /api/bf4/maps/{mapId}
+GET /api/bf4/notifications
+GET /api/bf4/notifications/{notificationId}
+GET /api/bf4/subscriptions/{id}/notifications
+```
+
+### Subscriptions
+
+```text
+POST   /api/bf4/subscriptions
+GET    /api/bf4/subscriptions
+GET    /api/bf4/subscriptions/{id}
+PUT    /api/bf4/subscriptions/{id}
+PATCH  /api/bf4/subscriptions/{id}
+DELETE /api/bf4/subscriptions/{id}
+```
+
+### Regras
+
+```text
+GET    /api/bf4/subscriptions/{id}/rules
+POST   /api/bf4/subscriptions/{id}/rules
+GET    /api/bf4/subscriptions/{id}/rules/{ruleId}
+PUT    /api/bf4/subscriptions/{id}/rules/{ruleId}
+PATCH  /api/bf4/subscriptions/{id}/rules/{ruleId}
+DELETE /api/bf4/subscriptions/{id}/rules/{ruleId}
+```
+
+Tipos disponíveis:
+
+- `MAP_IN`: mapa atual entre os mapas configurados;
+- `PLAYER_COUNT_AT_LEAST`: quantidade de jogadores igual ou superior ao mínimo.
+
+### Canais de notificação
+
+```text
+GET    /api/bf4/subscriptions/{id}/channels
+POST   /api/bf4/subscriptions/{id}/channels
+GET    /api/bf4/subscriptions/{id}/channels/{channelId}
+PUT    /api/bf4/subscriptions/{id}/channels/{channelId}
+PATCH  /api/bf4/subscriptions/{id}/channels/{channelId}
+DELETE /api/bf4/subscriptions/{id}/channels/{channelId}
+```
+
+O canal disponível atualmente é `EMAIL`. Ao criar ou atualizar um canal, envie
+apenas `type` e `enabled`; o destinatário é o email da conta autenticada. A
+estrutura foi mantida para permitir novos canais no futuro.
+
+### Histórico
+
+`GET /api/bf4/notifications` aceita `page`, `size`, `status`, `channel`,
+`mapId`, `serverId`, `subscriptionId`, `from` e `to`.
+
+- `page` começa em `0`;
+- `size` usa 20 por padrão e aceita no máximo 100;
+- a ordenação padrão é `attemptedAt` decrescente;
+- também são aceitos `sentAt`, `status` e `channelType`;
+- o snapshot do servidor, mapa e jogadores é preservado;
+- tentativas permanecem disponíveis após a remoção da subscription.
+
+Erros seguem `application/problem+json`:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Descrição segura do problema",
+  "errorCode": "VALIDATION_FAILED",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "fieldErrors": []
+}
+```
+
+## Observabilidade
+
+Em desenvolvimento:
+
+```text
+GET /actuator/health
+GET /actuator/info       (ADMIN)
+GET /actuator/metrics    (ADMIN)
+```
+
+Em produção, `prod` expõe apenas health, liveness e readiness. Os checks não
+fazem chamadas aos providers externos nem ao Mailjet. As métricas internas
+acompanham requisições, duração, timeouts, rejeições por concorrência, retries,
+ciclos ignorados e rejeições dos executores.
+
+## Migrations
+
+As migrations ficam em `src/main/resources/db/migration` e são executadas pelo
+Flyway no startup. O Hibernate opera com `ddl-auto=validate`, portanto não cria
+nem altera tabelas automaticamente.
+
+## Testes e qualidade
+
+```powershell
+.\mvnw.cmd test
+.\mvnw.cmd clean package
+```
+
+A suíte cobre autenticação, autorização, CSRF, rate limiting, validação, regras
+de notificação, histórico, integrações e limites de segurança.
 
 ## Estrutura do código
 
-- `config`: propriedades e beans de configuração.
-- `controller`: endpoints HTTP.
-- `dto.request`: dados recebidos pela API.
-- `dto.response`: respostas da API, incluindo erros.
-- `entity`: entidades persistidas pelo JPA.
-- `exception`: exceções da aplicação e tratamento global de erros.
-- `integration`: comunicação com GameTools e Battlelog Keeper.
-- `mapper`: conversões entre entidades JPA e modelos usando MapStruct.
-- `model`: objetos imutáveis e contratos do domínio.
-- `repository`: interfaces Spring Data que estendem `JpaRepository`.
-- `service`: regras de aplicação, monitoramento e notificações.
+```text
+src/main/java/com/yurepires/lazydeploy
+├── config         # propriedades e beans
+├── controller     # endpoints HTTP
+├── dto            # requests e responses
+├── entity         # entidades JPA
+├── exception      # exceções e handler global
+├── integration    # GameTools, Keeper e Mailjet
+├── mapper         # mapeamentos MapStruct
+├── model          # contratos do domínio
+├── repository     # interfaces JpaRepository
+├── security       # sessão, CSRF, CORS e autorização
+└── service        # regras e monitoramento
+```
+
+Controllers coordenam a entrada HTTP, services aplicam as regras, repositories
+persistem dados e mappers isolam conversões entre DTOs e entidades.
+
+## Como contribuir
+
+Contribuições são bem-vindas para correções, melhorias de segurança,
+documentação e novas funcionalidades.
+
+1. Faça um fork do repositório e crie uma branch específica para a alteração:
+   `feature/nome-da-funcionalidade` ou `fix/nome-do-problema`.
+2. Mantenha cada commit focado em uma mudança e use mensagens descritivas.
+3. Atualize ou crie testes para o comportamento alterado.
+4. Execute a suíte localmente antes de abrir o Pull Request:
+
+   ```powershell
+   .\mvnw.cmd test
+   ```
+
+5. Descreva no Pull Request o problema resolvido, as decisões relevantes e
+   como validar a alteração.
+
+Ao contribuir, preserve a separação de responsabilidades do projeto: regras de
+negócio devem permanecer nos services, acesso a dados nos repositories e
+comunicação externa nos adapters de `integration`. Alterações de banco devem
+usar uma nova migration Flyway, sem modificar migrations já aplicadas.
+
+Não envie credenciais, arquivos `.env`, chaves de API, dados de produção ou
+informações pessoais. Para vulnerabilidades, por favor, entre em contato comigo.
+
+## Licença
+
+Este repositório ainda não possui um arquivo de licença (`LICENSE`). Portanto,
+o código permanece protegido pelos direitos autorais aplicáveis e não há uma
+autorização automática para uso comercial, redistribuição, sublicenciamento ou
+criação de versões derivadas além do permitido pela legislação.
+
+Você pode consultar o código publicamente para fins de avaliação do portfólio,
+mas deve obter autorização do autor antes de redistribuí-lo ou incorporá-lo em
+outro projeto. Caso o projeto seja liberado como open source no futuro, um
+arquivo `LICENSE` será adicionado ao repositório e esta seção será atualizada
+com os termos escolhidos.
